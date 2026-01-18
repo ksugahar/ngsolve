@@ -324,8 +324,9 @@ namespace ngcomp
             patchdofs.SetSize0();
             numels.SetSize0();
 
-            // Collect DOFs from VOL, BND, and BBND elements touching this vertex
-            for (auto vb : { VOL, BND, BBND })
+            // Collect DOFs from VOL and BND elements touching this vertex
+            // Note: GetVertexElements does not support BBND (codimension 2)
+            for (auto vb : { VOL, BND })
               {
                 for (auto el : ma->GetVertexElements(v, vb))
                   {
@@ -408,10 +409,20 @@ namespace ngcomp
 
             // Assemble from BBND (interface) elements
             // This handles interface jump conditions for T-Omega formulation
-            for (auto el : ma->GetVertexElements(v, BBND))
+            // Note: GetVertexElements does not support BBND, so we iterate over all BBND elements
+            // and check if they touch vertex v. This is less efficient but correct.
+            for (size_t bbnd_nr = 0; bbnd_nr < ma->GetNE(BBND); bbnd_nr++)
               {
+                ElementId ei(BBND, bbnd_nr);
+
+                // Check if this BBND element touches vertex v
+                auto bbnd_verts = ma->GetElVertices(ei);
+                bool touches_v = false;
+                for (auto bv : bbnd_verts)
+                  if (bv == v) { touches_v = true; break; }
+                if (!touches_v) continue;
+
                 HeapReset hr(lh);
-                ElementId ei(BBND, el);
                 fes->GetDofNrs(ei, dofs);
 
                 if (dofs.Size() == 0) continue;
@@ -431,7 +442,7 @@ namespace ngcomp
                 for (auto & bfi : bfis[BBND])
                   {
                     if (!bfi->DefinedOn(trafo.GetElementIndex())) continue;
-                    if (!bfi->DefinedOnElement(el)) continue;
+                    if (!bfi->DefinedOnElement(bbnd_nr)) continue;
                     bfi->CalcElementMatrix(fel, trafo, elmati, lh);
                     elmat += elmati;
                   }
@@ -440,7 +451,7 @@ namespace ngcomp
                 for (auto & bfi : bfis_iface[BBND])
                   {
                     if (!bfi->DefinedOn(trafo.GetElementIndex())) continue;
-                    if (!bfi->DefinedOnElement(el)) continue;
+                    if (!bfi->DefinedOnElement(bbnd_nr)) continue;
                     bfi->CalcElementMatrix(fel, trafo, elmati, lh);
                     elmat += elmati;
                   }
@@ -453,7 +464,7 @@ namespace ngcomp
                 for (auto & lfi : lfis[BBND])
                   {
                     if (!lfi->DefinedOn(trafo.GetElementIndex())) continue;
-                    if (!lfi->DefinedOnElement(el)) continue;
+                    if (!lfi->DefinedOnElement(bbnd_nr)) continue;
                     lfi->CalcElementVector(fel, trafo, elvec, lh);
                     sumelvec += elvec;
                   }
@@ -462,7 +473,7 @@ namespace ngcomp
                 for (auto & lfi : lfis_iface[BBND])
                   {
                     if (!lfi->DefinedOn(trafo.GetElementIndex())) continue;
-                    if (!lfi->DefinedOnElement(el)) continue;
+                    if (!lfi->DefinedOnElement(bbnd_nr)) continue;
                     lfi->CalcElementVector(fel, trafo, elvec, lh);
                     sumelvec += elvec;
                   }

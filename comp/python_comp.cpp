@@ -67,6 +67,19 @@ namespace ngcomp
                        shared_ptr<GridFunction> gf,
                        LocalHeap & lh);
 
+  // Interface-aware version for equilibration with jump conditions
+  void PatchwiseSolveWithInterface (shared_ptr<SumOfIntegrals> bf,
+                                    shared_ptr<SumOfIntegrals> lf,
+                                    shared_ptr<GridFunction> gf,
+                                    shared_ptr<SumOfIntegrals> bf_iface,
+                                    shared_ptr<SumOfIntegrals> lf_iface,
+                                    LocalHeap & lh);
+
+  void PatchwiseSolveWithInterface (shared_ptr<SumOfIntegrals> bf,
+                                    shared_ptr<SumOfIntegrals> lf,
+                                    shared_ptr<GridFunction> gf,
+                                    LocalHeap & lh);
+
 
   shared_ptr<BaseMatrix>
   CreateMatrixFreeOperator (shared_ptr<FESpace> source_fes,
@@ -4480,7 +4493,78 @@ drawelems: BitArray
               shared_ptr<SumOfIntegrals> lf,
               shared_ptr<GridFunction> gf)
          { PatchwiseSolve(bf, lf, gf, lhp.GetLH()); },
-         py::arg("bf"), py::arg("lf"), py::arg("gf"));
+         py::arg("bf"), py::arg("lf"), py::arg("gf"),
+         R"raw_string(
+Patchwise local solve for equilibration error estimation.
+
+Solves local problems on vertex patches and accumulates the solution
+into the global GridFunction. This is used for constructing equilibrated
+fluxes for a posteriori error estimation (Braess-Schoeberl estimator).
+
+Parameters
+----------
+bf : SumOfIntegrals
+    Bilinear form defining the local problem (typically H(div) or H(curl) inner product)
+lf : SumOfIntegrals
+    Linear form (residual) weighted by hat functions
+gf : GridFunction
+    Output grid function to store the equilibrated solution
+
+Note: This version handles VOL and BND elements only.
+For interface (BBND) support, use PatchwiseSolveWithInterface.
+)raw_string");
+
+   m.def("PatchwiseSolveWithInterface",
+         [&] (shared_ptr<SumOfIntegrals> bf,
+              shared_ptr<SumOfIntegrals> lf,
+              shared_ptr<GridFunction> gf,
+              std::optional<shared_ptr<SumOfIntegrals>> bf_iface,
+              std::optional<shared_ptr<SumOfIntegrals>> lf_iface)
+         {
+           if (bf_iface.has_value() || lf_iface.has_value())
+             PatchwiseSolveWithInterface(bf, lf, gf,
+                                         bf_iface.value_or(nullptr),
+                                         lf_iface.value_or(nullptr),
+                                         lhp.GetLH());
+           else
+             PatchwiseSolveWithInterface(bf, lf, gf, lhp.GetLH());
+         },
+         py::arg("bf"), py::arg("lf"), py::arg("gf"),
+         py::arg("bf_iface") = py::none(),
+         py::arg("lf_iface") = py::none(),
+         R"raw_string(
+Patchwise local solve with interface (BBND) support for equilibration.
+
+Extended version of PatchwiseSolve that handles interface elements (BBND),
+essential for equilibrated error estimation in multi-material problems
+where interface jump conditions must be preserved (e.g., T-Omega formulation).
+
+Parameters
+----------
+bf : SumOfIntegrals
+    Bilinear form defining the local problem (can include VOL, BND, BBND terms)
+lf : SumOfIntegrals
+    Linear form (residual) weighted by hat functions
+gf : GridFunction
+    Output grid function to store the equilibrated solution
+bf_iface : SumOfIntegrals, optional
+    Additional interface-specific bilinear form (e.g., jump penalty terms)
+lf_iface : SumOfIntegrals, optional
+    Additional interface-specific linear form (e.g., prescribed jump data)
+
+Example
+-------
+>>> # For T-Omega formulation with interface jump [H_t]
+>>> bf = mu_inv * sigma * tau * dx + penalty * sigma * tau * ds(skeleton=True, definedon=interface)
+>>> lf = residual * tau * dx + jump_H_t * tau * ds(skeleton=True, definedon=interface)
+>>> PatchwiseSolveWithInterface(bf, lf, gf_sigma)
+
+Note
+----
+This function processes VOL, BND, and BBND elements. Interface elements
+(BBND) are treated specially to preserve tangential field jumps across
+material boundaries.
+)raw_string");
 
    m.def("MatrixFreeOperator",
          [&] (shared_ptr<FESpace> source_fes, py::object lam)

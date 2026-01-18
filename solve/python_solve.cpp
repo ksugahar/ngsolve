@@ -1,7 +1,7 @@
 #ifdef NGS_PYTHON
 #include "../ngstd/python_ngstd.hpp"
 #include<pybind11/numpy.h>
-#include<pybind11/stl_bind.h>
+// #include<pybind11/stl_bind.h>  // Temporarily disabled due to pybind11 v3.0.1 compatibility issue with MSVC
 #include<pybind11/stl.h>
 #include <solve.hpp>
 #include "../fem/tpintrule.hpp"

@@ -1,0 +1,13 @@
+# NGSolve MKL版 依存パッケージ
+#
+# インストール方法:
+#   pip install -r requirements-mkl.txt
+#
+# Intel MKL DLLs (NGSolve MKL版に必須)
+mkl
+intel-cmplr-lib-rt
+
+# 可視化 (オプション - コメントアウトを外して使用)
+# matplotlib
+# pyvista
+# webgui_jupyter_widgets

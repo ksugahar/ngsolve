@@ -64,6 +64,11 @@ set(CMAKE_CXX_STANDARD 17)
 if(EMSCRIPTEN)
     set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 endif()
+
+# Enable UTF-8 support for MSVC to handle Unicode in source files (e.g., pybind11 stl_bind.h)
+if(WIN32)
+    add_compile_options(/utf-8)
+endif()
 find_package(Netgen REQUIRED CONFIG HINTS ${CMAKE_INSTALL_PREFIX}/Contents/Resources)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

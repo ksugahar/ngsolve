@@ -3,9 +3,13 @@
 # インストール方法:
 #   pip install -r requirements-mkl.txt
 #
+# 重要: MKL 2024.2.0 が必要です
+# MKL 2025.x ではNGSolve MKL版がロード時にエラーになる可能性があります
+# (WinError 1114: DLL initialization failed)
+#
 # Intel MKL DLLs (NGSolve MKL版に必須)
-mkl
-intel-cmplr-lib-rt
+mkl==2024.2.0
+intel-cmplr-lib-rt==2024.2.1
 
 # 可視化 (オプション - コメントアウトを外して使用)
 # matplotlib

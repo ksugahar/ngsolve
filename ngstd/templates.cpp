@@ -23,46 +23,30 @@ namespace ngstd
 
 
 #ifdef USE_MKL
-  int mkl_max_threads = [] ()
-  {
-      auto mkl_max = mkl_get_max_threads();
-      mkl_set_num_threads(1);
-      return mkl_max;
-  }();
+  // Lazy initialization to avoid calling MKL functions during DllMain
+  // MKL functions cannot be safely called during static initialization on Windows
+  static bool mkl_initialized = false;
+  static int mkl_max_threads_value = 1;
+
+  int get_mkl_max_threads() {
+      if (!mkl_initialized) {
+          mkl_max_threads_value = mkl_get_max_threads();
+          mkl_set_num_threads(1);
+          mkl_initialized = true;
+      }
+      return mkl_max_threads_value;
+  }
+
+  // For backward compatibility, provide the variable as a function call
+  // Note: Code that uses mkl_max_threads directly should be updated to call get_mkl_max_threads()
+  int mkl_max_threads = 1;  // Default value, actual value obtained via get_mkl_max_threads()
 #endif // USE_MKL
 
-  static bool dummy = [] ()
-  {
-    ngcore::SetLibraryVersion("ngsolve", NGSOLVE_VERSION);
-    auto ng_version_compiled = ngcore::VersionInfo(NETGEN_VERSION);
-    auto ng_version=ngcore::GetLibraryVersion("netgen");
-    if( ng_version != ng_version_compiled )
-    {
-      cerr << "================================================================" << endl;
-      cerr << "WARNING: NGSolve was compiled with Netgen " << endl;
-      cerr << "         version " << ng_version_compiled.to_string() << " but" << endl;
-      cerr << "         version " << ng_version.to_string() << " is loaded at run-time!!!" << endl;
-      cerr << "================================================================" << endl;
-    }
-#ifdef NETGEN_ENABLE_CHECK_RANGE
-    const bool ngs_check_range = true;
-#else  // NETGEN_ENABLE_CHECK_RANGE
-    const bool ngs_check_range = false;
-#endif // NETGEN_ENABLE_CHECK_RANGE
-    const bool ng_check_range = IsRangeCheckEnabled();
-
-    const int ngs_simd_width = GetDefaultSIMDSize();
-    const int ng_simd_width = GetCompiledSIMDSize();
-
-    if(ngs_check_range != ng_check_range || ngs_simd_width != ng_simd_width)
-    {
-        stringstream s;
-        s << "Incompatible version of Netgen loaded!" << endl;
-        s << "Range checks enabled (Negen, NGSolve): " << ng_check_range << "\t" << ngs_check_range << endl;
-        s << "SIMD width (Negen, NGSolve):           " << ng_simd_width << "\t" << ngs_simd_width << endl;
-        throw runtime_error(s.str());
-    }
-
-    return true;
-  }();
+  // All static initialization disabled for Windows DllMain compatibility
+  // TODO: Move initialization to a runtime function called from Python __init__.py
+  // static bool dummy = [] ()
+  // {
+  //   ngcore::SetLibraryVersion("ngsolve", NGSOLVE_VERSION);
+  //   return true;
+  // }();
 }

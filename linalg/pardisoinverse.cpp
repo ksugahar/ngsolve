@@ -66,7 +66,7 @@ extern  integer F77_FUNC(pardisoinit)
 #ifdef USE_MKL
 namespace ngstd
 {
-    extern int mkl_max_threads;
+    extern int get_mkl_max_threads();
 }
 #endif // USE_MKL
 
@@ -255,12 +255,12 @@ namespace ngla
     if (task_manager) task_manager -> StopWorkers();
 
 #ifdef USE_MKL
-    mkl_set_num_threads(mkl_max_threads);
+    mkl_set_num_threads(ngstd::get_mkl_max_threads());
 #endif // USE_MKL
 
     // retvalue =
     if (matrix.Size() > 0)
-      F77_FUNC(pardiso) ( pt, &maxfct, &mnum, &matrixtype, &phase, &compressed_height, 
+      F77_FUNC(pardiso) ( pt, &maxfct, &mnum, &matrixtype, &phase, &compressed_height,
 			reinterpret_cast<double *>(matrix.Data()),
 			rowstart.Data(), indices.Data(), NULL, &nrhs, params, &msglevel,
 			NULL, NULL, &error );
@@ -506,7 +506,7 @@ namespace ngla
       task_manager->SuspendWorkers(1000);
 
 #ifdef USE_MKL
-    mkl_set_num_threads(mkl_max_threads);
+    mkl_set_num_threads(ngstd::get_mkl_max_threads());
 #endif // USE_MKL
 
     if (matrix.Size() > 0)
@@ -598,7 +598,7 @@ namespace ngla
       task_manager->SuspendWorkers(1000);
 
 #ifdef USE_MKL
-    mkl_set_num_threads(mkl_max_threads);
+    mkl_set_num_threads(ngstd::get_mkl_max_threads());
 #endif // USE_MKL
 
     if (matrix.Size() > 0)

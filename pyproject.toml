@@ -1,0 +1,9 @@
+[build-system]
+requires = [
+    "setuptools",
+    "wheel",
+    "scikit-build",
+    "pybind11-stubgen==2.5",
+    "netgen-mesher",
+]
+build-backend = "setuptools.build_meta"

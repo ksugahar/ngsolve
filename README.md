@@ -35,30 +35,87 @@ Build with Intel MKL for improved performance:
 cmake .. -DUSE_MKL=ON
 ```
 
-### 3. SparseSolv Preconditioners
+### 3. SparseSolv Integration
 
-Integrated preconditioners from [JP-MARs/SparseSolv](https://github.com/JP-MARs/SparseSolv):
+Integrated preconditioners and iterative solvers from [JP-MARs/SparseSolv](https://github.com/JP-MARs/SparseSolv).
 
-- **ICPreconditioner**: Shifted Incomplete Cholesky preconditioner
-- **SGSPreconditioner**: Symmetric Gauss-Seidel preconditioner
+#### Preconditioners
+
+Use with NGSolve's built-in Krylov solvers:
+
+- **ICPreconditioner**: Shifted Incomplete Cholesky
+- **ILUPreconditioner**: Shifted Incomplete LU (for non-symmetric matrices)
+- **SGSPreconditioner**: Symmetric Gauss-Seidel
 
 ```python
 from ngsolve import *
+from ngsolve.la import ICPreconditioner
 from ngsolve.krylovspace import CGSolver
 
-# Create bilinear form and assemble
+pre = ICPreconditioner(a.mat, freedofs=fes.FreeDofs(), shift=1.05)
+pre.Update()
+inv = CGSolver(a.mat, pre, printrates=True, tol=1e-10)
+gfu.vec.data = inv * f.vec
+```
+
+#### Iterative Solvers (SparseSolvSolver)
+
+Self-contained iterative solvers with **best-result tracking**: if the solver does
+not converge, the best solution found during iteration is returned automatically.
+
+Available methods:
+
+| Method | Algorithm | Preconditioner |
+|--------|-----------|----------------|
+| `ICCG` | Conjugate Gradient | Incomplete Cholesky |
+| `ICMRTR` | MRTR (residual minimization) | Incomplete Cholesky |
+| `SGSMRTR` | MRTR with split formula | Built-in Symmetric Gauss-Seidel |
+| `CG` | Conjugate Gradient | None |
+| `MRTR` | MRTR | None |
+
+**Usage as inverse operator** (drop-in replacement for NGSolve's CGSolver):
+
+```python
+from ngsolve import *
+from ngsolve.la import SparseSolvSolver
+
+fes = H1(mesh, order=2, dirichlet="left|right|top|bottom")
+u, v = fes.TnT()
 a = BilinearForm(fes)
 a += grad(u)*grad(v)*dx
 a.Assemble()
 
-# Create IC preconditioner
-pre = ICPreconditioner(a.mat, shift=1.05)
-pre.Update()
-
-# Use with CGSolver
-inv = CGSolver(a.mat, pre, printrates=True, tol=1e-10)
-gfu.vec.data = inv * f.vec
+solver = SparseSolvSolver(a.mat, method="ICCG",
+                          freedofs=fes.FreeDofs(), tol=1e-10)
+gfu.vec.data = solver * f.vec
 ```
+
+**Usage with detailed results:**
+
+```python
+solver = SparseSolvSolver(a.mat, method="ICCG",
+                          freedofs=fes.FreeDofs(),
+                          tol=1e-10, maxiter=1000,
+                          save_residual_history=True)
+result = solver.Solve(f.vec, gfu.vec)
+print(f"Converged: {result.converged}")
+print(f"Iterations: {result.iterations}")
+print(f"Final residual: {result.final_residual}")
+print(f"Residual history: {result.residual_history}")
+```
+
+**Parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `method` | `"ICCG"` | Solver method |
+| `freedofs` | `None` | BitArray for Dirichlet BCs |
+| `tol` | `1e-10` | Relative convergence tolerance |
+| `maxiter` | `1000` | Maximum iterations |
+| `shift` | `1.05` | IC preconditioner shift parameter |
+| `save_best_result` | `True` | Track best solution during iteration |
+| `save_residual_history` | `False` | Record residual at each iteration |
+| `printrates` | `False` | Print convergence info |
 
 ## Binary Releases
 

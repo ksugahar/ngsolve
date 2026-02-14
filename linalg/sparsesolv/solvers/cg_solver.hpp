@@ -7,6 +7,7 @@
 #define SPARSESOLV_SOLVERS_CG_SOLVER_HPP
 
 #include "iterative_solver.hpp"
+#include "../core/constants.hpp"
 
 namespace sparsesolv {
 
@@ -83,7 +84,7 @@ protected:
             Scalar pAp = this->dot_product(p.data(), Ap.data(), n);
 
             // Avoid division by zero
-            if (std::abs(pAp) < 1e-30) {
+            if (std::abs(pAp) < constants::BREAKDOWN_THRESHOLD) {
                 // Numerical breakdown - check if already converged
                 double norm_r = this->compute_norm(r.data(), n);
                 if (this->check_convergence(norm_r, iter)) {
@@ -96,11 +97,10 @@ protected:
 
             // x = x + alpha * p
             // r = r - alpha * Ap
-            #pragma omp parallel for
-            for (index_t i = 0; i < n; ++i) {
+            parallel_for(n, [&](index_t i) {
                 x[i] += alpha * p[i];
                 r[i] -= alpha * Ap[i];
-            }
+            });
 
             // Compute residual norm
             double norm_r = this->compute_norm(r.data(), n);
@@ -124,10 +124,9 @@ protected:
             rz_old = rz_new;
 
             // p = z + beta * p
-            #pragma omp parallel for
-            for (index_t i = 0; i < n; ++i) {
+            parallel_for(n, [&](index_t i) {
                 p[i] = z[i] + beta * p[i];
-            }
+            });
         }
 
         // Max iterations reached

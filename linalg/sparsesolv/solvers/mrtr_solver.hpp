@@ -7,6 +7,7 @@
 #define SPARSESOLV_SOLVERS_MRTR_SOLVER_HPP
 
 #include "iterative_solver.hpp"
+#include "../core/constants.hpp"
 
 namespace sparsesolv {
 
@@ -103,7 +104,7 @@ protected:
             if (iter == 0) {
                 // First iteration: simplified formulas
                 // zeta_0 = (w, r) / (v, w)
-                if (std::abs(v_w) < 1e-30) {
+                if (std::abs(v_w) < constants::BREAKDOWN_THRESHOLD) {
                     // Numerical breakdown - check if already converged
                     double norm_r = this->compute_norm(r.data(), n);
                     if (this->check_convergence(norm_r, iter)) {
@@ -120,14 +121,14 @@ protected:
 
                 // Denominator for zeta and eta
                 Scalar denom = nu * v_w - w_y * w_y;
-                if (std::abs(denom) < 1e-60) {
+                if (std::abs(denom) < constants::DENOMINATOR_BREAKDOWN) {
                     // Numerical breakdown - check if already converged
                     double norm_r = this->compute_norm(r.data(), n);
                     if (this->check_convergence(norm_r, iter)) {
                         return this->build_result(true, iter + 1, norm_r);
                     }
                     // Regularize denominator (like SGS-MRTR) to allow continuation
-                    denom = (std::real(denom) >= 0 ? Scalar(1e-60) : Scalar(-1e-60));
+                    denom = (std::real(denom) >= 0 ? Scalar(constants::DENOMINATOR_BREAKDOWN) : Scalar(-constants::DENOMINATOR_BREAKDOWN));
                 }
 
                 Scalar inv_denom = Scalar(1) / denom;
@@ -144,29 +145,25 @@ protected:
 
             // p_k = u + (eta * zeta_old / zeta) * p
             Scalar coeff = eta * zeta_old / zeta;
-            #pragma omp parallel for
-            for (index_t i = 0; i < n; ++i) {
+            parallel_for(n, [&](index_t i) {
                 p[i] = u_[i] + coeff * p[i];
-            }
+            });
             zeta_old = zeta;
 
             // x_{k+1} = x_k + zeta * p
-            #pragma omp parallel for
-            for (index_t i = 0; i < n; ++i) {
+            parallel_for(n, [&](index_t i) {
                 x[i] += zeta * p[i];
-            }
+            });
 
             // y_{k+1} = eta * y + zeta * v
-            #pragma omp parallel for
-            for (index_t i = 0; i < n; ++i) {
+            parallel_for(n, [&](index_t i) {
                 y_[i] = eta * y_[i] + zeta * v_[i];
-            }
+            });
 
             // r_{k+1} = r_k - y_{k+1}
-            #pragma omp parallel for
-            for (index_t i = 0; i < n; ++i) {
+            parallel_for(n, [&](index_t i) {
                 r[i] -= y_[i];
-            }
+            });
 
             // Compute residual norm
             double norm_r = this->compute_norm(r.data(), n);
@@ -182,16 +179,14 @@ protected:
             }
 
             // z_{k+1} = eta * z + zeta * w
-            #pragma omp parallel for
-            for (index_t i = 0; i < n; ++i) {
+            parallel_for(n, [&](index_t i) {
                 z[i] = eta * z[i] + zeta * w_[i];
-            }
+            });
 
             // u_{k+1} = u_k - z_{k+1}
-            #pragma omp parallel for
-            for (index_t i = 0; i < n; ++i) {
+            parallel_for(n, [&](index_t i) {
                 u_[i] -= z[i];
-            }
+            });
         }
 
         // Max iterations reached

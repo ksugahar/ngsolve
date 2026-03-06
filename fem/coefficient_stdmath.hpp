@@ -66,20 +66,33 @@ namespace ngfem
     void DoArchive(Archive& ar) {}
   };
 
+  // MSVC fix: forward declare shared_ptr<CF> overloads so unqualified
+  // lookup in templates below can find them (MSVC ADL bug workaround)
+  NGS_DLL_HEADER shared_ptr<CoefficientFunction> asinh(shared_ptr<CoefficientFunction> x);
+  NGS_DLL_HEADER shared_ptr<CoefficientFunction> acosh(shared_ptr<CoefficientFunction> x);
+
   struct GenericASinh {
     template <typename T> T operator() (T x) const { return asinh(x); }
     template <typename T> T Diff (T x) const { return 1.0 / sqrt(1.+x*x); }
     template <typename T>
-    AutoDiffDiff<1,T> operator() (AutoDiffDiff<1,T> x) const { throw Exception("no asinh for ADD"); }    
+    AutoDiffDiff<1,T> operator() (AutoDiffDiff<1,T> x) const { throw Exception("no asinh for ADD"); }
+    template <int D, typename SCAL>
+    AutoDiffRec<D,SCAL> operator() (AutoDiffRec<D,SCAL> x) const { throw Exception("no asinh for AutoDiffRec"); }
+    template <int N>
+    SIMD<double,N> operator() (SIMD<double,N> x) const { throw ExceptionNOSIMD("no asinh for SIMD<double>"); }
     static string Name() { return "asinh"; }
     void DoArchive(Archive& ar) {}
   };
-  
+
   struct GenericACosh {
     template <typename T> T operator() (T x) const { return acosh(x); }
     template <typename T> T Diff (T x) const { return 1.0 / sqrt(1.-x*x); }
-    template <typename T>    
-    AutoDiffDiff<1,T> operator() (AutoDiffDiff<1,T> x) const { throw Exception("no acosh for ADD"); }        
+    template <typename T>
+    AutoDiffDiff<1,T> operator() (AutoDiffDiff<1,T> x) const { throw Exception("no acosh for ADD"); }
+    template <int D, typename SCAL>
+    AutoDiffRec<D,SCAL> operator() (AutoDiffRec<D,SCAL> x) const { throw Exception("no acosh for AutoDiffRec"); }
+    template <int N>
+    SIMD<double,N> operator() (SIMD<double,N> x) const { throw ExceptionNOSIMD("no acosh for SIMD<double>"); }
     static string Name() { return "acosh"; }
     void DoArchive(Archive& ar) {}
   };

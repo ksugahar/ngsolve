@@ -7,9 +7,19 @@ This is a fork of [NGSolve](https://ngsolve.org/) that provides:
 
 ## Why This Fork?
 
+### 1. SetGeomInfo API (not in upstream)
+
 NGSolve's `mesh.Curve(order)` requires UV parameters linking each surface element to the OCC geometry. Netgen sets these automatically for meshes it generates, but **external meshes** (from Cubit, Gmsh, etc.) lack this information.
 
 The `SetGeomInfo` API (proposed in [NGSolve/netgen PR #232](https://github.com/NGSolve/netgen/pull/232)) allows setting UV parameters programmatically, enabling high-order curving for externally imported meshes.
+
+### 2. Intel MKL Build (not available via pip)
+
+`pip install ngsolve` provides binaries built with **OpenBLAS**. This fork provides Windows binaries built with **Intel MKL**, which includes:
+
+- **PARDISO** -- High-performance direct sparse solver (not available in pip version)
+- **MKL BLAS/LAPACK** -- Optimized matrix operations, faster than OpenBLAS for large problems
+- **MKL threading** -- Intel OpenMP-based parallel BLAS for multi-core performance
 
 ### Without SetGeomInfo
 
@@ -42,9 +52,19 @@ Tested with [Coreform Cubit Mesh Export](https://github.com/ksugahar/Coreform_Cu
 
 Achieves Netgen-native accuracy for externally imported hex/tet meshes.
 
+## pip vs This Fork
+
+| Feature | `pip install ngsolve` | This fork |
+|---------|----------------------|-----------|
+| BLAS/LAPACK | OpenBLAS | **Intel MKL** |
+| PARDISO solver | No | **Yes** |
+| SetGeomInfo API | No | **Yes** |
+| `mesh.Curve()` for external mesh | No | **Yes** |
+| Platform | Windows/Linux/macOS | Windows only |
+
 ## Downloads
 
-Pre-built Windows binaries (Intel MKL):
+Pre-built Windows binaries (Intel MKL + SetGeomInfo):
 
 - [v6.2.2601-setgeominfo-mkl](https://github.com/ksugahar/ngsolve/releases/tag/v6.2.2601-setgeominfo-mkl) -- NGSolve 6.2.2601 + SetGeomInfo + MKL
 

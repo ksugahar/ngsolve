@@ -8,7 +8,9 @@
 
 namespace ngla {
 
+#ifdef NGS_PYTHON
   void ExportSparseFactorizationInterface(py::module &m);
+#endif // NGS_PYTHON
 
 struct MapInnerDofs {
   shared_ptr<BitArray> inner;

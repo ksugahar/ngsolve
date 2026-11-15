@@ -10,6 +10,12 @@ else()
   set(lib_name ngscudalib)
 endif()
 
+if(WIN32)
+  # ngscudalib is its own DLL: it imports ngsolve.dll's symbols instead of
+  # re-declaring them as its own exports (which breaks data members)
+  remove_definitions(-DNGS_EXPORTS)
+endif()
+
 # host compiler only: the kernels are compiled at run time by nvrtc
 find_package(CUDAToolkit REQUIRED)
 
@@ -35,6 +41,7 @@ if(NETGEN_USE_PYTHON)
 endif(NETGEN_USE_PYTHON)
 
 install( FILES
+        cuda_api.hpp
         cuda_linalg.hpp
         cuda_profiler.hpp
         cuda_core.hpp

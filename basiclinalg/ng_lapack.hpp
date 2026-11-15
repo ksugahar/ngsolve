@@ -65,7 +65,7 @@ namespace ngbla
 
   extern "C" {
 #ifdef MKL_ILP64
-    typedef long int integer;
+    typedef int64_t integer;  // ILP64: 64 bit on every platform (long is 32 bit on Windows)
 #else
     typedef int integer;
 #endif
@@ -164,8 +164,8 @@ namespace ngbla
 
   /*
   extern "C" 
-  void dgemv_ (char & trans, int & m, int & n, double & alpha, double & a, int & lda, double & x, int & incx,
-               double & beta, double & y, int & incy);
+  void dgemv_ (char & trans, integer & m, integer & n, double & alpha, double & a, integer & lda, double & x, integer & incx,
+               double & beta, double & y, integer & incy);
   */
 
   inline void LapackMultAx (ngbla::FlatMatrix<double> a,
@@ -812,28 +812,28 @@ namespace ngbla
 
   /*
   extern "C"
-  void dgetri_ (int & n, double & a, int & lda,
-                int & ipiv, double & work, int & lwork, int & info);
+  void dgetri_ (integer & n, double & a, integer & lda,
+                integer & ipiv, double & work, integer & lwork, integer & info);
 
   extern "C"
-  void dgetrf_ (int & n, int & m, double & a, int & lda,
-                int & ipiv, int & info);
+  void dgetrf_ (integer & n, integer & m, double & a, integer & lda,
+                integer & ipiv, integer & info);
 
   extern "C"
-  void dgetrs_ (char & trans, int & n, int & nrhs, 
-                double & a, int & lda, int & ipiv, 
-                double & b, int & ldb, int & info);
+  void dgetrs_ (char & trans, integer & n, integer & nrhs, 
+                double & a, integer & lda, integer & ipiv, 
+                double & b, integer & ldb, integer & info);
 
 
 
   extern "C"
-  void dpotrf_ (char & uplo, int & n, double & a, int & lda,
-                int & info);
+  void dpotrf_ (char & uplo, integer & n, double & a, integer & lda,
+                integer & info);
 
   extern "C"
-  void dpotrs_ (char & uplo, int & n, int & nrhs, 
-                double & a, int & lda,
-                double & b, int & ldb, int & info);
+  void dpotrs_ (char & uplo, integer & n, integer & nrhs, 
+                double & a, integer & lda,
+                double & b, integer & ldb, integer & info);
   */
 
 
@@ -974,10 +974,10 @@ namespace ngbla
 
     /*
     // symmetric, non-spd
-    int lwork = -1;
+    integer lwork = -1;
     double hwork[1] = { 1.0 };
     dsytrf_ (&uplo, &n, &a(0,0), &lda, &ipiv[0], &hwork[0], &lwork, &info);
-    lwork = int(hwork[0]);
+    lwork = integer(hwork[0]);
     ArrayMem<double, 1000> work(lwork);
     dsytrf_ (&uplo, &n, &a(0,0), &lda, &ipiv[0], &work[0], &lwork, &info);
     dsytrs_ (&uplo, &n, &nrhs, &a(0,0), &lda, &ipiv[0], &b(0,0), &ldb, &info);
@@ -998,18 +998,18 @@ namespace ngbla
 
   /*
   extern "C"
-  void zgetri_ (int & n, double & a, int & lda,
-                int & ipiv, double & work, int & lwork, int & info);
+  void zgetri_ (integer & n, double & a, integer & lda,
+                integer & ipiv, double & work, integer & lwork, integer & info);
 
   extern "C"
-  void zgetrf_ (int & n, int & m, double & a, int & lda,
-                int & ipiv, int & info);
+  void zgetrf_ (integer & n, integer & m, double & a, integer & lda,
+                integer & ipiv, integer & info);
 
   extern "C"
-  void zgetrs_ (char & trans, int & m, int & nrhs, double & a, int & lda,
-                int & ipiv, 
-                double & b, int & ldb, 
-                int & info);
+  void zgetrs_ (char & trans, integer & m, integer & nrhs, double & a, integer & lda,
+                integer & ipiv, 
+                double & b, integer & ldb, 
+                integer & info);
   */
 
 
@@ -1070,13 +1070,13 @@ namespace ngbla
 
   /*
   extern "C"
-  void dsyev_(char & jobz, char & uplo, int & n , double & A , int & lda, double & w,
-              double & work, int & lwork, int & info); 
+  void dsyev_(char & jobz, char & uplo, integer & n , double & A , integer & lda, double & w,
+              double & work, integer & lwork, integer & info); 
 
   extern "C"
-  void zgeev_( char *jobvl, char *jobvr, int *n, std::complex<double> *A, int * lda, std::complex<double>* lami, 
-               std::complex<double> * vl, int * nvl, std::complex<double> * vr, int * nvr, 
-               std::complex<double> * work, int * lwork, double * rwork, int * info);
+  void zgeev_( char *jobvl, char *jobvr, integer *n, std::complex<double> *A, integer * lda, std::complex<double>* lami, 
+               std::complex<double> * vl, integer * nvl, std::complex<double> * vr, integer * nvr, 
+               std::complex<double> * work, integer * lwork, double * rwork, integer * info);
   */
 
   //  extern "C"
@@ -1249,7 +1249,7 @@ namespace ngbla
   // Solve complex generalized eigenvalue problem (QZ) 
   /*
   extern "C"
-  void zggev_(char *jobvl,char* jobvr,int* N,std::complex<double>* A, int* lda,std::complex<double>* B, int* ldb, std::complex<double>* alpha, std::complex<double>* beta, std::complex<double>* vl, int* ldvl, std::complex<double>* vr, int* ldvr, std::complex<double>* work, int* lwork, double* rwork, int* info); 
+  void zggev_(char *jobvl,char* jobvr,integer* N,std::complex<double>* A, integer* lda,std::complex<double>* B, integer* ldb, std::complex<double>* alpha, std::complex<double>* beta, std::complex<double>* vl, integer* ldvl, std::complex<double>* vr, integer* ldvr, std::complex<double>* work, integer* lwork, double* rwork, integer* info); 
   */
 
 
@@ -1386,8 +1386,8 @@ namespace ngbla
 
   /*
   extern "C"
-  void dsygv_(int & itype, char & jobzm, char & uplo , int & n1, double & A , int & n, 
-              double & B, int  & nb, double & lami, double & work, int & lwork, int & info); 
+  void dsygv_(integer & itype, char & jobzm, char & uplo , integer & n1, double & A , integer & n, 
+              double & B, integer  & nb, double & lami, double & work, integer & lwork, integer & info); 
   */
 
   inline void LapackEigenValuesSymmetric (ngbla::FlatMatrix<double> a,

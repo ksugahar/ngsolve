@@ -229,6 +229,12 @@ if(USE_MKL)
 endif(USE_MKL)
 
 if (USE_LAPACK)
+    # Every BLAS/LAPACK the superbuild provides or passes on (ngsolve-openblas, the
+    # downloaded LAPACK, the SuiteSparse it builds) uses 32-bit integers, and the
+    # LAPACK_LIBRARIES cache entry above is reset, so ILP64 cannot be honoured here.
+    if(LAPACK_ILP64 OR (DEFINED BLA_SIZEOF_INTEGER AND BLA_SIZEOF_INTEGER EQUAL 8))
+      message(FATAL_ERROR "ILP64 BLAS/LAPACK needs USE_SUPERBUILD=OFF with explicit LAPACK_LIBRARIES and LAPACK_ILP64=ON")
+    endif()
     # Try to use ngsolve_openblas python package if available
     if(NOT LAPACK_LIBRARIES AND NOT USE_MKL AND (WIN32 OR (UNIX AND NOT APPLE)))
       find_package(Python3 COMPONENTS Interpreter QUIET)

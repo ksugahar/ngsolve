@@ -277,6 +277,11 @@ if (USE_LAPACK)
     endif()
     target_link_libraries(ngs_lapack INTERFACE "${LAPACK_LIBRARIES}")
     list(APPEND NGSOLVE_COMPILE_DEFINITIONS LAPACK)
+    # 64-bit integer BLAS/LAPACK interface (for example MATLAB's libmwblas/libmwlapack)
+    option( LAPACK_ILP64 "LAPACK_LIBRARIES use 64-bit integers (ILP64)" OFF)
+    if(LAPACK_ILP64)
+      list(APPEND NGSOLVE_COMPILE_DEFINITIONS MKL_ILP64)
+    endif(LAPACK_ILP64)
 endif (USE_LAPACK)
 
 #######################################################################

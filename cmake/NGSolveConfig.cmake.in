@@ -61,6 +61,12 @@ set(NGSOLVE_INSTALL_DIR_INCLUDE @NGSOLVE_INSTALL_DIR_INCLUDE@)
 set(NGSOLVE_INSTALL_DIR_CMAKE   @NGSOLVE_INSTALL_DIR_CMAKE@)
 set(NGSOLVE_INSTALL_DIR_RES     @NGSOLVE_INSTALL_DIR_RES@)
 
+if(NGSOLVE_USE_CUDA)
+  # ngscudalib links CUDA::cudart, CUDA::nvrtc and CUDA::cuda_driver; the
+  # consumer locates its own toolkit (for MEX: MATLAB's bundled CUDA)
+  include(CMakeFindDependencyMacro)
+  find_dependency(CUDAToolkit)
+endif()
 include(${CMAKE_CURRENT_LIST_DIR}/ngsolve-targets.cmake)
 
 if(WIN32)

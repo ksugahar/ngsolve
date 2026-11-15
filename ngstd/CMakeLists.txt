@@ -17,8 +17,9 @@ add_custom_command(
                 -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/gpukernel.h
                 -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/gpukernel_code.cpp
                 -DSYMBOL=ngs_gpu::code_gpukernel
+                -DHEADER=${CMAKE_CURRENT_SOURCE_DIR}/gpukernel.hpp
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/embed_source.cmake
-        DEPENDS gpukernel.h embed_source.cmake
+        DEPENDS gpukernel.h gpukernel.hpp gpu_api.hpp embed_source.cmake
         COMMENT "Embedding gpukernel.h"
         )
 
@@ -48,7 +49,7 @@ install( FILES
         memusage.hpp ngstd.hpp
         stringops.hpp
         python_ngstd.hpp ngs_utils.hpp
-        bspline.hpp sample_sort.hpp gpuwrapper.hpp gpukernel.hpp gpukernel.h tinybla.hpp tinybla.h
+        bspline.hpp sample_sort.hpp gpuwrapper.hpp gpu_api.hpp gpukernel.hpp gpukernel.h tinybla.hpp tinybla.h
         DESTINATION ${NGSOLVE_INSTALL_DIR_INCLUDE}
         COMPONENT ngsolve_devel
        )

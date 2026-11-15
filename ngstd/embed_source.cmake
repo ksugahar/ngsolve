@@ -27,7 +27,12 @@ else()
   set(nsclose "")
 endif()
 
-set(body "// generated from ${inputname} - do not edit\n#include <string>\n${nsopen}extern const std::string ${name};\nconst std::string ${name} = std::string()\n")
+set(hdr "")
+if(HEADER)
+  # the declaration (with its export attribute) must precede the definition
+  set(hdr "#include \"${HEADER}\"\n")
+endif()
+set(body "// generated from ${inputname} - do not edit\n#include <string>\n${hdr}${nsopen}extern const std::string ${name};\nconst std::string ${name} = std::string()\n")
 set(pos 0)
 while(pos LESS len)
   string(SUBSTRING "${content}" ${pos} ${chunksize} chunk)

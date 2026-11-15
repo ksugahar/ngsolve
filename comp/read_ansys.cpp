@@ -1349,7 +1349,7 @@ dict with keys:
                             "nodes": [vertex numbers] (if vb=="nodes")} ]   (*BOUNDARY)
     "loads"            : [ {"kind": "force"/"pressure"/"body", "name", "value",
                             "dof": 1/2/3 (force only), "vector": (x,y,z) (body only),
-                            "ltype", "region"/"vb"/"nodes" as above} ]   (*CLOAD/*DSLOAD/*DLOAD)
+                            "ltype", "region"/"vb"/"nodes" as above} ]   (*CLOAD, *DSLOAD, *DLOAD)
     "pressure"         : scalar CoefficientFunction on BND  (or None)
                          -- aggregates all surface pressures; apply as  -pressure*(n*v)*ds
     "body_force"       : vector CoefficientFunction on VOL  (or None)

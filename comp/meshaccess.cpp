@@ -309,6 +309,9 @@ namespace ngcomp
 
     virtual ~ALE_ElementTransformation() { ; }
 
+    // the displacement this transformation adds to its base map
+    const GridFunction * GetDeformation () const { return deform; }
+
 
 
     virtual void CalcJacobian (const IntegrationPoint & ip,
@@ -2503,6 +2506,27 @@ namespace ngcomp
     return MakeRegionCoefficientFunction (cfs);
   }
 
+  // The integration-local deformation (dx/ds(deformation=gf)) carried by a
+  // boundary element's transformation, or nullptr.  A mesh-level deformation
+  // (Mesh.SetDeformation) is already part of MeshAccess::GetTrafo and is not
+  // returned.
+  static const GridFunction * IntegrationDeformation (const ElementTransformation & trafo,
+                                                      const MeshAccess & ma)
+  {
+    const GridFunction * gf = nullptr;
+    if (auto p = dynamic_cast<const ALE_ElementTransformation<1,2,Ng_ElementTransformation<1,2>>*> (&trafo))
+      gf = p->GetDeformation();
+    else if (auto p = dynamic_cast<const ALE_ElementTransformation<1,2,Ng_ConstElementTransformation<1,2>>*> (&trafo))
+      gf = p->GetDeformation();
+    else if (auto p = dynamic_cast<const ALE_ElementTransformation<2,3,Ng_ElementTransformation<2,3>>*> (&trafo))
+      gf = p->GetDeformation();
+    else if (auto p = dynamic_cast<const ALE_ElementTransformation<2,3,Ng_ConstElementTransformation<2,3>>*> (&trafo))
+      gf = p->GetDeformation();
+    if (gf && gf == ma.GetDeformation().get())
+      return nullptr;
+    return gf;
+  }
+
   class BoundaryFromVolumeCoefficientFunction :
     public T_CoefficientFunction<BoundaryFromVolumeCoefficientFunction>
   {
@@ -2622,7 +2646,12 @@ namespace ngcomp
               ElementId vei(VOL, elnr);
               int locfacnr = ma.GetElFacets(vei).Pos(facet);
               
-              ElementTransformation & vol_trafo = ma.GetTrafo (vei, lh);
+              // evaluate the volume field on the map the outer integral uses:
+              // an integration-local deformation of the boundary element is
+              // applied to the volume element as well (AddDeformation(nullptr)
+              // returns the mesh transformation itself)
+              const ElementTransformation & vol_trafo =
+                ma.GetTrafo (vei, lh).AddDeformation (IntegrationDeformation (trafo, ma), lh);
               if (!vol_cf->DefinedOn(vol_trafo)) continue;
               
               Facet2ElementTrafo f2el(vol_trafo.GetElementType(), ma.GetElVertices(vei));

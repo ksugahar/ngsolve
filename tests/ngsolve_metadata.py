@@ -36,6 +36,11 @@ def __dir__() -> list[str]:
 _OPENBLAS_REQUIREMENT = "ngsolve-openblas==0.3.33; platform_system != 'Darwin'"
 
 
+def _blas_requirement() -> str:
+    """BLAS wheel requirement; NGSOLVE_BLAS_REQUIREMENT overrides it (an MKL build pins mkl)."""
+    return os.environ.get("NGSOLVE_BLAS_REQUIREMENT", _OPENBLAS_REQUIREMENT)
+
+
 def _netgen_requirement() -> str:
     """Pin netgen-mesher to the exact version ngsolve is built against.
 
@@ -65,7 +70,8 @@ def dynamic_metadata(field: str, settings: dict | None = None):
         return [
             _netgen_requirement(),
             "numpy",
-            _OPENBLAS_REQUIREMENT,
+            _blas_requirement(),
+            *[r for r in os.environ.get("NGSOLVE_EXTRA_REQUIREMENTS", "").split(";;") if r],
         ]
 
     msg = f"Unsupported field: {field}"

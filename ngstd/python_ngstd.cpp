@@ -6,6 +6,8 @@
 #include "tinybla.hpp"
 #include <Python.h>
 #include <pybind11/numpy.h>
+#include <cfloat>
+#include <cmath>
 
 
 
@@ -216,9 +218,24 @@ static void ExportGPU (py::module & m)
            };
 
            auto npgeneric = py::module::import("numpy").attr("generic");
+           auto sig = kernel->Signature();
            std::vector<KernelArg> kargs;
+           // a Python number narrowed to a declared fp32 value: refuse a finite value
+           // fp32 cannot hold instead of passing +-inf to the kernel
+           auto to_float = [] (py::handle arg, size_t idx) {
+             double d = py::cast<double>(arg);   // a Python int beyond double range raises cast_error
+             if (std::isfinite(d) && std::fabs(d) > double(FLT_MAX))
+               throw Exception("GPUQueue.Launch: argument " + ToString(idx) + " = " + py::cast<std::string>(py::str(arg))
+                               + " does not fit float32");
+             return float(d); };
+           size_t i = 0;
            for (auto arg : args)
              {
+               // declared value type of this argument, if the source has a KERNEL(...) declaration
+               ArgType decl;
+               if (sig && i < sig->args.size() && sig->args[i].kind == KernelSignature::Value)
+                 decl = sig->args[i].type;
+               i++;
                if (py::isinstance<PyGPUBuffer>(arg))
                  {
                    auto & b = py::cast<PyGPUBuffer&>(arg);
@@ -232,9 +249,50 @@ static void ExportGPU (py::module & m)
                    kargs.push_back (KernelArg(bytes.data(), bytes.size(), argtype(dt)));
                  }
                else if (py::isinstance<py::float_>(arg))
-                 kargs.push_back (KernelArg(py::cast<float>(arg)));   // Metal is fp32
+                 {
+                   // a Python float has no precision of its own: take the declared one,
+                   // never guess (a guessed fp32 silently corrupts a double kernel)
+                   if (decl == ArgType(ArgType::Float, 8))
+                     kargs.push_back (KernelArg(py::cast<double>(arg)));
+                   else if (decl == ArgType(ArgType::Float, 4))
+                     kargs.push_back (KernelArg(to_float(arg, i-1)));
+                   else
+                     throw Exception("GPUQueue.Launch: argument " + ToString(i-1) +
+                                     " is a Python float, but the kernel declares no float/double value there; "
+                                     "pass numpy.float32(...) or numpy.float64(...), or declare it with KERNEL(...)");
+                 }
                else if (py::isinstance<py::int_>(arg))
-                 kargs.push_back (KernelArg(py::cast<int32_t>(arg)));
+                 {
+                   // a Python int takes the declared width; out-of-range values raise.
+                   // Without a declaration it is a C int (int32), as before.
+                   auto bad = [&] () {
+                     return Exception("GPUQueue.Launch: argument " + ToString(i-1) + " is a Python int, but the kernel declares "
+                                      + decl.ToString() + " there; pass a numpy scalar of that type (numpy.int16, numpy.uint8, numpy.bool_, ...)"); };
+                   try
+                     {
+                       if (decl == ArgType())
+                         kargs.push_back (KernelArg(py::cast<int32_t>(arg)));
+                       else if (decl == ArgType(ArgType::Int, 4))
+                         kargs.push_back (KernelArg(py::cast<int32_t>(arg)));
+                       else if (decl == ArgType(ArgType::Int, 8))
+                         kargs.push_back (KernelArg(py::cast<int64_t>(arg)));
+                       else if (decl == ArgType(ArgType::UInt, 4))
+                         kargs.push_back (KernelArg(py::cast<uint32_t>(arg)));
+                       else if (decl == ArgType(ArgType::UInt, 8))
+                         kargs.push_back (KernelArg(py::cast<uint64_t>(arg)));
+                       else if (decl == ArgType(ArgType::Float, 8))
+                         kargs.push_back (KernelArg(py::cast<double>(arg)));
+                       else if (decl == ArgType(ArgType::Float, 4))
+                         kargs.push_back (KernelArg(to_float(arg, i-1)));
+                       else
+                         throw bad();
+                     }
+                   catch (py::cast_error &)
+                     {
+                       throw Exception("GPUQueue.Launch: argument " + ToString(i-1) + " = " + py::cast<std::string>(py::str(arg))
+                                       + " does not fit " + (decl == ArgType() ? std::string("int32 (no KERNEL declaration)") : decl.ToString()));
+                     }
+                 }
                else
                  throw Exception("GPUQueue.Launch: argument must be GPUBuffer, numpy scalar, float or int");
              }

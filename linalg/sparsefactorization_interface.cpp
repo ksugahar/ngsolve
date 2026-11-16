@@ -1,6 +1,8 @@
 #include "sparsefactorization_interface.hpp"
 #include <la.hpp>
+#ifdef NGS_PYTHON
 #include <pybind11/pytypes.h>
+#endif // NGS_PYTHON
 
 namespace ngla {
 

@@ -73,6 +73,11 @@ def get_git_version(cwd):
 def get_version(cwd):
     git_version = get_git_version(cwd)
 
+    # A PEP 440 local segment in the tag (v6.2.2608+radia.1) goes last.
+    git_version, plus, local = git_version.partition("+")
+    if plus:
+        local, _, rest = local.partition("-")
+        git_version += "-" + rest if rest else ""
     version = git_version[1:].split("-")
     if len(version) > 2:
         version = version[:2]
@@ -83,7 +88,7 @@ def get_version(cwd):
     else:
         version = version[0]
 
-    return version
+    return version + (plus + local if plus else "")
 
 
 def main():

@@ -2,6 +2,7 @@
 #define CUDA_CORE_HPP
 
 #include <cuda_runtime.h>
+#include "cuda_api.hpp"
 
 #include <core/array.hpp>
 #include <core/exception.hpp>
@@ -36,7 +37,7 @@ namespace ngs_cuda
 #endif
 
 
-  extern cudaStream_t ngs_cuda_stream;
+  extern NGS_CUDA_API cudaStream_t ngs_cuda_stream;
   
 
   // Kernel wrapper only available if we are compiling the current file with the cuda compiler

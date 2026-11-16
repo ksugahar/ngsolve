@@ -43,8 +43,8 @@ namespace ngbla
     template <ORDERING ORD>
     void TMult (SliceMatrix<double,ORD> m2) const;
     void Mult (FlatVector<double> v2) const;
-    void Mult (SliceMatrix<double,RowMajor> m2) const { TMult(m2); }
-    void Mult (SliceMatrix<double,ColMajor> m2) const { TMult(m2); }
+    void Mult (SliceMatrix<double,RowMajor> m2) const;
+    void Mult (SliceMatrix<double,ColMajor> m2) const;
   };
 
   // vector v is scaled such that v(0) = 1, but this value is not stores
@@ -57,8 +57,8 @@ namespace ngbla
 
     template <ORDERING ORD>
     void TMult (SliceMatrix<double,ORD> m2) const; 
-    void Mult (SliceMatrix<double,RowMajor> m2) const { TMult(m2); }
-    void Mult (SliceMatrix<double,ColMajor> m2) const { TMult(m2); }
+    void Mult (SliceMatrix<double,RowMajor> m2) const;
+    void Mult (SliceMatrix<double,ColMajor> m2) const;
   };
 
   

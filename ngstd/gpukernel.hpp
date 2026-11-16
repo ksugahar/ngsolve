@@ -28,10 +28,11 @@
 */
 
 #include <string>
+#include "gpu_api.hpp"
 
 namespace ngs_gpu
 {
-  extern const std::string code_gpukernel;
+  extern NGS_GPU_API const std::string code_gpukernel;
 }
 
 #endif

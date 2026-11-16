@@ -39,3 +39,36 @@ if _config.is_python_package:
     preload_cuda_libs()
 
 from ngsolve._ngscuda import *
+
+
+# cuDSS (optional, USE_CUDSS builds): loaded on request from the pinned pip packages
+# by absolute path, with its cuBLAS first; ngscuda itself does not depend on it
+_CUDSS_VERSION = (0, 8, 0)
+
+def LoadCuDSS():
+    """Load the pinned cuDSS library (and the cuBLAS it needs) by absolute path.
+    Returns a json report of the loaded files and version; raises if anything
+    is missing, another copy is loaded, or the version differs from the pin."""
+    import ngsolve._ngscuda as _m
+    if not hasattr(_m, "_LoadCuDSS"):
+        raise RuntimeError("this ngsolve build has no cuDSS support (USE_CUDSS=OFF)")
+    if sys.platform.startswith("win"):
+        deps = [("nvidia.cublas", "bin/cublasLt64_12.dll"), ("nvidia.cublas", "bin/cublas64_12.dll")]
+        lib = ("nvidia.cu12", "bin/cudss64_0.dll")
+    else:
+        deps = [("nvidia.cublas", "lib/libcublasLt.so.12"), ("nvidia.cublas", "lib/libcublas.so.12")]
+        lib = ("nvidia.cu12", "lib/libcudss.so.0")
+    paths = []
+    for pkg, rel in deps + [lib]:
+        try:
+            path = str(r.files(pkg).joinpath(rel))
+        except ModuleNotFoundError:
+            raise RuntimeError(f"cuDSS: the pinned package providing {pkg} is not installed")
+        if not os.path.isfile(path):
+            raise RuntimeError(f"cuDSS: {path} from the pinned {pkg} package is missing")
+        paths.append(path)
+    for path in paths[:-1]:
+        if sys.platform.startswith("win"):
+            _cuda_handles.append(os.add_dll_directory(os.path.dirname(path)))
+        _cuda_handles.append(ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL))
+    return _m._LoadCuDSS(paths[-1], *_CUDSS_VERSION)

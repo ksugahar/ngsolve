@@ -17,6 +17,9 @@ param(
   [string] $Matlab = "C:\Program Files\MATLAB\R2026a",   # nvcc is MATLAB's bundled CUDA 12.8
   [string] $CudaRuntime = "12.8.57",
   [string] $CudaNvrtc = "12.8.61",
+  [string] $Cudss = "0.8.0.10",           # headers only at build time; loaded at run time
+  [string] $CudssWheelSha256 = "89bf57d4d05d25c7f6e1288acbc94c5eed519763c55d7ec1f6d73099ace8554e",
+  [string] $Cublas = "12.8.3.14",         # cuDSS's runtime dependency
   [string] $VcVars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
   [string] $MsvcVersion = "14.44"
 )
@@ -84,9 +87,19 @@ $env:NGSOLVE_EXTRA_REQUIREMENTS = ""   # never inherited from the caller
 if ($Cuda) {
   $cudaRoot = (Join-Path $Matlab "sys/cuda/win64/cuda").Replace('\','/')
   $cudaArgs = @("-Ccmake.define.USE_CUDA=ON", "-Ccmake.define.CUDAToolkit_ROOT=$cudaRoot", "-Ccmake.define.CMAKE_CUDA_COMPILER=$cudaRoot/bin/nvcc.exe", "-Ccmake.define.CMAKE_CUDA_ARCHITECTURES=80")
-  $cudaExclude = @("--exclude", "cudart64_12.dll", "--exclude", "nvrtc64_120_0.dll", "--exclude", "nvcuda.dll")
-  $env:NGSOLVE_EXTRA_REQUIREMENTS = "nvidia-cuda-runtime-cu12==$CudaRuntime;;nvidia-cuda-nvrtc-cu12==$CudaNvrtc"
-  $receipt.cuda = [ordered]@{ nvcc = $cudaRoot; arch = "sm_80"; runtime = $CudaRuntime; nvrtc = $CudaNvrtc }
+  $cudaExclude = @("--exclude", "cudart64_12.dll", "--exclude", "nvrtc64_120_0.dll", "--exclude", "nvcuda.dll",
+                   "--exclude", "cudss64_0.dll", "--exclude", "cublas64_12.dll", "--exclude", "cublasLt64_12.dll")
+  # cuDSS headers from the exact pinned wheel (hash-checked); nothing of it is linked or bundled
+  $cd = "$Job\cudss"; New-Item -ItemType Directory -Force $cd | Out-Null
+  Step "cudss wheel" { & $py -m pip download -q --no-deps --only-binary=:all: --platform win_amd64 "nvidia-cudss-cu12==$Cudss" -d $cd }
+  $cw = @(Get-ChildItem "$cd\nvidia_cudss_cu12-$Cudss-*.whl")
+  if ($cw.Count -ne 1) { throw "expected one cuDSS wheel, found $($cw.Count)" }
+  if ((Get-FileHash $cw[0].FullName -Algorithm SHA256).Hash.ToLower() -ne $CudssWheelSha256) { throw "cuDSS wheel hash differs from the pin" }
+  Expand-Archive $cw[0].FullName "$cd\x"
+  $cudssInc = "$cd/x/nvidia/cu12/include".Replace('\','/')
+  $cudaArgs += @("-Ccmake.define.USE_CUDSS=ON", "-Ccmake.define.CUDSS_INCLUDE_DIR=$cudssInc")
+  $env:NGSOLVE_EXTRA_REQUIREMENTS = "nvidia-cuda-runtime-cu12==$CudaRuntime;;nvidia-cuda-nvrtc-cu12==$CudaNvrtc;;nvidia-cudss-cu12==$Cudss;;nvidia-cublas-cu12==$Cublas"
+  $receipt.cuda = [ordered]@{ nvcc = $cudaRoot; arch = "sm_80"; runtime = $CudaRuntime; nvrtc = $CudaNvrtc; cudss = $Cudss; cudss_wheel_sha256 = $CudssWheelSha256; cublas = $Cublas }
 }
 Push-Location $NGSolve
 try {
@@ -94,6 +107,12 @@ try {
 } finally { Pop-Location }
 Step "ngsolve repair" { & $py -m delvewheel repair --ignore-existing --namespace-pkg "netgen;netgen.libs;netgen.include" --exclude "nglib.dll" --exclude "ngcore.dll" --exclude "TK*.dll" --exclude "mkl_*.dll" --exclude "libiomp5md.dll" @cudaExclude -w $Wh (Get-ChildItem "$Dist\ngsolve-*.whl").FullName }
 
+# no NVIDIA library may be bundled into a repaired wheel
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+foreach ($w in Get-ChildItem "$Wh\*.whl") {
+  $z = [IO.Compression.ZipFile]::OpenRead($w.FullName)
+  try { $bad = @($z.Entries | Where-Object { $_.Name -match '^(cudss|cublas|cudart|nvrtc|nvcuda)' }) } finally { $z.Dispose() }
+  if ($bad.Count) { throw "$($w.Name) bundles NVIDIA libraries: $($bad.Name -join ', ')" } }
 $receipt.wheels = @(Get-ChildItem "$Wh\*.whl" | ForEach-Object { [ordered]@{ name = $_.Name; sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() } })
 $receipt | ConvertTo-Json -Depth 4 | Set-Content "$Out\receipt.json"
 Write-Host "=== WHEELS_DONE $(Get-Date -Format o)"

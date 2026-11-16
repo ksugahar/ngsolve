@@ -27,6 +27,20 @@ add_library(${lib_name} SHARED
 )
 
 target_link_libraries(${lib_name} PUBLIC CUDA::cudart CUDA::nvrtc CUDA::cuda_driver ngsolve $<BUILD_INTERFACE:netgen_python>)
+
+# optional sparse Cholesky through NVIDIA cuDSS: headers only at build time,
+# the library is loaded at run time from an absolute path (no link dependency)
+option(USE_CUDSS "GPU sparse Cholesky through cuDSS (headers from CUDSS_INCLUDE_DIR)" OFF)
+if(USE_CUDSS)
+  if(NOT EXISTS "${CUDSS_INCLUDE_DIR}/cudss.h")
+    message(FATAL_ERROR "USE_CUDSS=ON needs CUDSS_INCLUDE_DIR with cudss.h, got '${CUDSS_INCLUDE_DIR}'")
+  endif()
+  target_sources(${lib_name} PRIVATE cudss_cholesky.cpp)
+  target_include_directories(${lib_name} PRIVATE ${CUDSS_INCLUDE_DIR})
+  target_compile_definitions(${lib_name} PUBLIC NGS_USE_CUDSS)
+  target_link_libraries(${lib_name} PRIVATE ${CMAKE_DL_LIBS})
+  install(FILES cudss_cholesky.hpp DESTINATION ${NGSOLVE_INSTALL_DIR_INCLUDE} COMPONENT ngsolve_devel)
+endif()
 set_target_properties(${lib_name} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(CMAKE_PROJECT_NAME STREQUAL "NGSolve")
   install( TARGETS ${lib_name} ${ngs_install_dir} )

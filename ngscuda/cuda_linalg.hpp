@@ -20,7 +20,7 @@ namespace ngla
 {
   using namespace ngs_cuda;
 
-  void InitCuLinalg();
+  NGS_CUDA_API void InitCuLinalg();
 
 
   // typed device access to any DeviceVector<double> (DeviceVectorWrapper, ...),
@@ -45,7 +45,7 @@ namespace ngla
   }
 
 
-  shared_ptr<BaseMatrix> CreateDevMatrix (BaseMatrix &mat);
+  NGS_CUDA_API shared_ptr<BaseMatrix> CreateDevMatrix (BaseMatrix &mat);
 
 }
 

@@ -87,6 +87,9 @@ namespace ngbla
 
   template void HouseholderReflection :: TMult (SliceMatrix<double,RowMajor> m2) const;
   template void HouseholderReflection :: TMult (SliceMatrix<double,ColMajor> m2) const;
+  // out of line: member template instantiations are not exported on Windows
+  void HouseholderReflection :: Mult (SliceMatrix<double,RowMajor> m2) const { TMult(m2); }
+  void HouseholderReflection :: Mult (SliceMatrix<double,ColMajor> m2) const { TMult(m2); }
 
 
 
@@ -128,6 +131,8 @@ namespace ngbla
 
   template void HouseholderReflection1 :: TMult (SliceMatrix<double,RowMajor> m2) const;
   template void HouseholderReflection1 :: TMult (SliceMatrix<double,ColMajor> m2) const;
+  void HouseholderReflection1 :: Mult (SliceMatrix<double,RowMajor> m2) const { TMult(m2); }
+  void HouseholderReflection1 :: Mult (SliceMatrix<double,ColMajor> m2) const { TMult(m2); }
 
 
 

@@ -11,7 +11,7 @@ namespace ngs_cuda
   using namespace ngstd;
 
   
-  void InitCUDA (int verbose = 2);
+  NGS_CUDA_API void InitCUDA (int verbose = 2);
 
 }
 

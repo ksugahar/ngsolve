@@ -17,15 +17,16 @@
 */
 
 #include <gpuwrapper.hpp>
+#include "cuda_api.hpp"
 
 namespace ngs_cuda
 {
   // installs the ngs_gpu device creator
-  void InitCudaDevice();
+  NGS_CUDA_API void InitCudaDevice();
 
   // raw cuda device pointer of a buffer allocated by this backend,
   // for handing ngs_gpu storage to cuda libraries and typed kernels
-  void * BufferDevPtr (ngs_gpu::Buffer & buf);
+  NGS_CUDA_API void * BufferDevPtr (ngs_gpu::Buffer & buf);
 }
 
 #endif

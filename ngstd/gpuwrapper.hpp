@@ -34,6 +34,7 @@
 #include <ostream>
 
 #include <core/memtrace.hpp>
+#include "gpu_api.hpp"
 
 namespace ngs_gpu
 {
@@ -55,9 +56,9 @@ namespace ngs_gpu
   // public interface is non-virtual, backends override the Do* hooks,
   // otherwise the typed overloads get hidden in derived classes
   // true while a Queue records launches, see Queue::BeginRecording
-  bool IsRecording();
+  NGS_GPU_API bool IsRecording();
 
-  class Buffer
+  class NGS_GPU_API Buffer
   {
   protected:
     size_t size;   // bytes
@@ -104,7 +105,7 @@ namespace ngs_gpu
   };
 
   // trace label for a transfer, e.g. "H2D 4.2 MB"
-  string TransferLabel (const char * dir, size_t bytes);
+  NGS_GPU_API string TransferLabel (const char * dir, size_t bytes);
   // byte count as the event's integer value
   inline int TransferValue (size_t bytes)
   { return int(std::min<size_t>(bytes, size_t(INT_MAX))); }
@@ -197,7 +198,7 @@ namespace ngs_gpu
   };
 
   // all KERNEL declarations in a source, keyed by kernel name
-  std::map<string, KernelSignature> ParseKernelSignatures (const string & source);
+  NGS_GPU_API std::map<string, KernelSignature> ParseKernelSignatures (const string & source);
 
 
   // one positional kernel argument: a buffer binding, or bytes by value
@@ -277,7 +278,7 @@ namespace ngs_gpu
                << " groups/unit=" << ki.max_groups_per_unit;
   }
 
-  class Kernel : public std::enable_shared_from_this<Kernel>
+  class NGS_GPU_API Kernel : public std::enable_shared_from_this<Kernel>
   {
     friend class Library;
     shared_ptr<Library> library;   // the raw handle points into the module
@@ -292,7 +293,7 @@ namespace ngs_gpu
   };
 
 
-  class Library : public std::enable_shared_from_this<Library>
+  class NGS_GPU_API Library : public std::enable_shared_from_this<Library>
   {
     friend class Device;
     std::map<string, KernelSignature> signatures;   // parsed from the source
@@ -320,7 +321,7 @@ namespace ngs_gpu
   { return library ? library->FindSignature(Name()) : nullptr; }
 
   // throws if the arguments do not match the kernel's declaration
-  void CheckKernelArgs (const Kernel & kernel, const std::vector<KernelArg> & args);
+  NGS_GPU_API void CheckKernelArgs (const Kernel & kernel, const std::vector<KernelArg> & args);
 
 
   class Queue;
@@ -334,7 +335,7 @@ namespace ngs_gpu
     scalars make iterations recordable: everything an iteration reads is
     at a fixed device address.
   */
-  class Program
+  class NGS_GPU_API Program
   {
     friend class Queue;
   public:
@@ -359,7 +360,7 @@ namespace ngs_gpu
   };
 
 
-  class Queue : public std::enable_shared_from_this<Queue>
+  class NGS_GPU_API Queue : public std::enable_shared_from_this<Queue>
   {
     shared_ptr<Program> recording;   // while recording
 
@@ -400,7 +401,7 @@ namespace ngs_gpu
   };
 
 
-  class Device
+  class NGS_GPU_API Device
   {
   public:
     virtual ~Device() = default;
@@ -455,11 +456,11 @@ namespace ngs_gpu
 
   // reference implementation on the host, always available.
   // kernels are compiled with the host c++ compiler, see gpukernel.hpp
-  shared_ptr<Device> GetCpuDevice();
+  NGS_GPU_API shared_ptr<Device> GetCpuDevice();
 
-  void SetDeviceCreator (DeviceCreator creator);
-  bool HasDevice();
-  shared_ptr<Device> GetDevice();     // nullptr if no backend registered
+  NGS_GPU_API void SetDeviceCreator (DeviceCreator creator);
+  NGS_GPU_API bool HasDevice();
+  NGS_GPU_API shared_ptr<Device> GetDevice();     // nullptr if no backend registered
 }
 
 #endif

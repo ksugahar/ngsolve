@@ -393,8 +393,8 @@ namespace ngla
     for (int i = 0; i < nused; i++)
       blocknrs[i] = in_blocknr[i];
 
-    long int cnt = 0;
-    long int cnt_master = 0;
+    size_t cnt = 0;           // 64-bit: long is 32-bit on Windows and nze can exceed 2^31
+    size_t cnt_master = 0;
 
     for (int i = 0; i < nused; i++)
       {
@@ -722,7 +722,7 @@ namespace ngla
 
             for (int i2 = 0; i2 < jj; i2++)
               {
-                int firsti = hfirstinrow[i1+i2] + jj-i2;
+                size_t firsti = hfirstinrow[i1+i2] + jj-i2;
                 TM * hli = hlfact+firsti;
                 
                 TM q1 = - diag[i1+i2] * hli[-1];
@@ -758,7 +758,7 @@ namespace ngla
             
             for (int l = 0; l < BS; l++)
               {
-                int firstj = hfirstinrow[i1+jj+l]-l;
+                size_t firstj = hfirstinrow[i1+jj+l]-l;
                 for (int k = l; k < nk; k++)
                   hlfact[firstj+k] += sum[k*BS+l];
               }
@@ -767,10 +767,10 @@ namespace ngla
             for (int hj2 = 0; hj2 < 4; hj2++)
               {
                 int j2 = jj+hj2;
-                int firstj = hfirstinrow[i1+j2];
+                size_t firstj = hfirstinrow[i1+j2];
                 for (int i2 = jj; i2 < j2; i2++)
                   {
-                    int firsti = hfirstinrow[i1+i2] + j2-i2;
+                    size_t firsti = hfirstinrow[i1+i2] + j2-i2;
 		    
                     TM q = - diag[i1+i2] * hlfact[firsti-1];
                     TM qtrans = Trans (q);  
@@ -798,12 +798,12 @@ namespace ngla
 		  cout << IM(4) << "." << flush;
 	      }
 
-	    int firstj = hfirstinrow[i1+jj];
+	    size_t firstj = hfirstinrow[i1+jj];
 	    int nk = hfirstinrow[i1+jj+1]-firstj;
 
 	    for (int i2 = 0; i2 < jj; i2++)
 	      {
-		int firsti = hfirstinrow[i1+i2] + jj-i2;
+		size_t firsti = hfirstinrow[i1+i2] + jj-i2;
 		  
 		TM q = - diag[i1+i2] * hlfact[firsti-1];
 		TM qtrans = Trans (q);  
@@ -828,9 +828,9 @@ namespace ngla
 
 	// merge rows
 
-	int firsti_ri = hfirstinrow_ri[i1] + last_same-i1-1;
-	int firsti = hfirstinrow[i1] + last_same-i1-1;
-	int lasti = hfirstinrow[i1+1]-1;
+	size_t firsti_ri = hfirstinrow_ri[i1] + last_same-i1-1;
+	size_t firsti = hfirstinrow[i1] + last_same-i1-1;
+	size_t lasti = hfirstinrow[i1+1]-1;
 	mi = lasti-firsti+1;
 
 	// loop unrolling for cache
@@ -849,7 +849,7 @@ namespace ngla
               
               for (int i2 = i1; i2 < last_same; i2++)
                 {
-                  int first = hfirstinrow[i2] + last_same-i2-1;
+                  size_t first = hfirstinrow[i2] + last_same-i2-1;
                   TM qtrans  = Trans (diag[i2] * hlfact[first+j]);
                   TM qtrans2 = Trans (diag[i2] * hlfact[first+j+1]);
                   TM qtrans3 = Trans (diag[i2] * hlfact[first+j+2]);
@@ -880,8 +880,8 @@ namespace ngla
               // merge together
               for (int l = 0; l < BS; l++)
                 {
-                  int firstj = hfirstinrow[hrowindex2[firsti_ri+j+l]];
-                  int firstj_ri = hfirstinrow_ri[hrowindex2[firsti_ri+j+l]];
+                  size_t firstj = hfirstinrow[hrowindex2[firsti_ri+j+l]];
+                  size_t firstj_ri = hfirstinrow_ri[hrowindex2[firsti_ri+j+l]];
 
                   for (int k = j+1+l; k < mi; k++)
                     {
@@ -909,7 +909,7 @@ namespace ngla
 
 	    for (int i2 = i1; i2 < last_same; i2++)
 	      {
-		int first = hfirstinrow[i2] + last_same-i2-1;
+		size_t first = hfirstinrow[i2] + last_same-i2-1;
 
 		TM qtrans = Trans (diag[i2] * hlfact[first+j]);
 		for (int k = j+1; k < mi; k++)
@@ -919,8 +919,8 @@ namespace ngla
 	    // flops2 += (mi - j)*(last_same-i1);
 
 	    // merge together
-	    int firstj = hfirstinrow[hrowindex2[firsti_ri+j]];
-	    int firstj_ri = hfirstinrow_ri[hrowindex2[firsti_ri+j]];
+	    size_t firstj = hfirstinrow[hrowindex2[firsti_ri+j]];
+	    size_t firstj_ri = hfirstinrow_ri[hrowindex2[firsti_ri+j]];
 
 	    for (int k = j+1; k < mi; k++)
 	      {
@@ -939,11 +939,11 @@ namespace ngla
 
 	for (int i2 = i1; i2 < last_same; i2++)
 	  {
-	    int first = hfirstinrow[i2] + last_same-i2-1;
-	    int last = hfirstinrow[i2+1];
-	    int j_ri = hfirstinrow_ri[i2] + last_same-i2-1;
+	    size_t first = hfirstinrow[i2] + last_same-i2-1;
+	    size_t last = hfirstinrow[i2+1];
+	    size_t j_ri = hfirstinrow_ri[i2] + last_same-i2-1;
 
-	    for (int j = first; j < last; j++, j_ri++)
+	    for (size_t j = first; j < last; j++, j_ri++)
 	      {
 		TM q = diag[i2] * lfact[j];
 		diag[rowindex2[j_ri]] -= Trans (lfact[j]) * q;
@@ -955,11 +955,12 @@ namespace ngla
         timerc.Stop();
       }
 
-    for (int i = 0, j = 0; i < n; i++)
+    size_t j = 0;
+    for (int i = 0; i < n; i++)
       {
 	TM ai = diag[i];
 
-	int last = hfirstinrow[i+1];
+	size_t last = hfirstinrow[i+1];
 	for ( ; j < last; j++)
 	  {
 	    TM hm = ai * lfact[j];

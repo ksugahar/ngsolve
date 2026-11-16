@@ -29,7 +29,7 @@ y = dev.NewBuffer(n, np.float32)
 x.H2D(np.arange(n, dtype=np.float32))
 y.H2D(np.ones(n, dtype=np.float32))
 
-queue.Launch(kernel, groups=[(n+tg-1)//tg], groupsize=[tg], args=[x, y, 2.0, n])
+queue.Launch(kernel, groups=[(n+tg-1)//tg], groupsize=[tg], args=[x, y, np.float32(2.0), n])
 queue.Finish()
 
 print(y.D2H(n)[:8])        # 2*i + 1

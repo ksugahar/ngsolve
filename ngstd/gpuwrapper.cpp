@@ -46,9 +46,10 @@ namespace ngs_gpu
         { "int32_t", {ArgType::Int, 4} }, { "signed", {ArgType::Int, 4} },
         { "unsigned", {ArgType::UInt, 4} }, { "unsigned int", {ArgType::UInt, 4} },
         { "uint", {ArgType::UInt, 4} }, { "uint32_t", {ArgType::UInt, 4} },
-        { "long", {ArgType::Int, 8} }, { "long long", {ArgType::Int, 8} },
+        // long follows the host data model, as nvrtc and Metal do: 4 bytes on Windows
+        { "long", {ArgType::Int, unsigned(sizeof(long))} }, { "long long", {ArgType::Int, 8} },
         { "int64_t", {ArgType::Int, 8} }, { "ptrdiff_t", {ArgType::Int, 8} },
-        { "unsigned long", {ArgType::UInt, 8} }, { "unsigned long long", {ArgType::UInt, 8} },
+        { "unsigned long", {ArgType::UInt, unsigned(sizeof(unsigned long))} }, { "unsigned long long", {ArgType::UInt, 8} },
         { "uint64_t", {ArgType::UInt, 8} }, { "size_t", {ArgType::UInt, 8} },
         { "short", {ArgType::Int, 2} }, { "int16_t", {ArgType::Int, 2} },
         { "unsigned short", {ArgType::UInt, 2} }, { "ushort", {ArgType::UInt, 2} },

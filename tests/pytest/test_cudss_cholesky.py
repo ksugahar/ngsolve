@@ -21,7 +21,7 @@ def problem(n=6, order=2, symmetric=True, coef=1.0):
     mesh = MakeStructured3DMesh(hexes=False, nx=n, ny=n, nz=n)
     fes = H1(mesh, order=order, dirichlet="left|bottom")
     u, v = fes.TnT()
-    a = BilinearForm(coef * grad(u) * grad(v) * dx + u * v * dx, symmetric=symmetric).Assemble()
+    a = BilinearForm(coef * grad(u) * grad(v) * dx + u * v * dx, symmetric=symmetric, symmetric_storage=symmetric).Assemble()
     f = LinearForm(sin(3 * x) * v * dx).Assemble()
     return fes, a, f
 

@@ -242,9 +242,21 @@ def test_ready_event_orders_a_producer_on_another_stream():
     cu.check(cu.l.cudaEventCreate(ctypes.byref(ev)), "event")
     host2 = np.ascontiguousarray(2 * vv)
     try:
+        # size the delay from the measured copy time (fast GPUs finish a fixed count in ms)
+        t0, t1 = ctypes.c_void_p(), ctypes.c_void_p()
+        cu.check(cu.l.cudaEventCreate(ctypes.byref(t0)), "event"); cu.check(cu.l.cudaEventCreate(ctypes.byref(t1)), "event")
+        cu.check(cu.l.cudaEventRecord(t0, stream), "record")
+        cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(dst), ctypes.c_void_p(src), ctypes.c_size_t(big), 3, stream), "delay")
+        cu.check(cu.l.cudaEventRecord(t1, stream), "record")
+        cu.check(cu.l.cudaEventSynchronize(t1), "sync")
+        ms = ctypes.c_float()
+        cu.check(cu.l.cudaEventElapsedTime(ctypes.byref(ms), t0, t1), "elapsed")
+        cu.l.cudaEventDestroy(t0); cu.l.cudaEventDestroy(t1)
+        ncopy = max(16, int(np.ceil(1000.0 / max(ms.value, 1e-3))))   # >= about 1 s on the producer stream
+
         def produce():
             cu.h2d(pv, vv)                                     # back to A, synchronously
-            for _ in range(16):                                # delay on the producer stream
+            for _ in range(ncopy):                             # delay on the producer stream
                 cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(dst), ctypes.c_void_p(src), ctypes.c_size_t(big), 3, stream), "delay")
             cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(pv), host2.ctypes.data_as(ctypes.c_void_p),
                                           ctypes.c_size_t(host2.nbytes), 1, stream), "produce")

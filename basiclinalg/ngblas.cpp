@@ -379,7 +379,7 @@ namespace ngbla
                 KMatTransVecCols<NV,decltype(UJ)::value,decltype(MASK)::value> (h, a.Data()+i, dist, x.Data(), mask, res);
                 Iterate<NV> ([&] (auto v) NGK_LAMBDA_INLINE
                   {
-                    if constexpr (decltype(MASK)::value && v.value == NV-1)
+                    if constexpr (std::decay_t<decltype(MASK)>::value && v.value == NV-1)
                       store (&y(i+v.value*SW), res.template Get<v.value>(), mask);
                     else
                       store (&y(i+v.value*SW), res.template Get<v.value>());

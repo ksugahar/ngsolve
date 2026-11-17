@@ -275,6 +275,12 @@ int cudaEventSynchronize (void * e)
 {
   static sync_fn real;
   if (!real) real = (sync_fn) dlsym (RTLD_NEXT, "cudaEventSynchronize");
+  if (!real)                    /* cudart came in with a dlopen'd module: not in the global scope */
+    {
+      void * h = dlopen ("libcudart.so.12", RTLD_NOW | RTLD_NOLOAD);
+      if (h) real = (sync_fn) dlsym (h, "cudaEventSynchronize");
+    }
+  if (!real) { fprintf (stderr, "evsync shim: cudaEventSynchronize not found\n"); abort (); }
   const char * d = getenv ("EVSYNC_DISABLE");           /* mutant: drop the wait for this one event only */
   if (d && strtoull (d, 0, 10) == (unsigned long long)(uintptr_t) e) return 0;
   const char * p = getenv ("EVSYNC_LOG");

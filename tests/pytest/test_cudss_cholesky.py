@@ -5,9 +5,10 @@ import ctypes, os, sys, time
 import numpy as np
 import pytest
 from ngsolve import *
-from ngsolve.la import SparseMatrixd
+import ngsolve.la as la
 from ngsolve.meshes import MakeStructured3DMesh
 
+SparseMatrixd = getattr(la, "SparseMatrixd", None) or getattr(la, "SparseMatrixdouble")  # name from typeid, MSVC: double
 ngscuda = pytest.importorskip("ngsolve.ngscuda")
 if not hasattr(ngscuda, "CuDSSCholesky"):
     pytest.skip("ngsolve built without USE_CUDSS", allow_module_level=True)

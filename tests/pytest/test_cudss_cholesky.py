@@ -311,6 +311,7 @@ int cudaEventSynchronize (void * e)
 {
   static sync_fn real;
   if (!real) real = (sync_fn) dlsym (RTLD_NEXT, "cudaEventSynchronize");
+  if (getenv ("EVSYNC_DISABLE")) return 0;             /* mutant: the wait is removed, nothing recorded */
   const char * p = getenv ("EVSYNC_LOG");
   if (p) { FILE * f = fopen (p, "a"); if (f) { fprintf (f, "%llu\n", (unsigned long long)(uintptr_t) e); fclose (f); } }
   return real (e);
@@ -318,9 +319,9 @@ int cudaEventSynchronize (void * e)
 """
 
 EVSYNC_CHILD = r"""
-import ctypes, json, os, sys
-sys.path.insert(0, os.path.dirname(sys.argv[1]))
-import test_cudss_cholesky as t
+import ctypes, importlib.util, json, os, sys
+spec = importlib.util.spec_from_file_location("cudss_test_under_probe", sys.argv[1])
+t = importlib.util.module_from_spec(spec); spec.loader.exec_module(t)
 cu = t.Cudart()
 fes, a, f = t.problem()
 rp, cl, vv, (prp, pcl, pv) = t.device_csr(cu, a.mat, fes.ndof)
@@ -333,9 +334,13 @@ for e in (ev, other):
 cu.check(cu.l.cudaStreamSynchronize(stream), "sync")
 log = os.environ["EVSYNC_LOG"]
 out = {"ev": ev.value, "other": other.value}
-for phase, kw in (("passed", {"ready_event": ev.value}), ("withheld", {}), ("wrong", {"ready_event": other.value})):
+for phase, kw in (("passed", {"ready_event": ev.value}), ("withheld", {}), ("wrong", {"ready_event": other.value}),
+                  ("wait_disabled", {"ready_event": ev.value})):
     open(log, "w").close()
+    if phase == "wait_disabled":
+        os.environ["EVSYNC_DISABLE"] = "1"
     chol.Update(prp, pcl, pv, **kw)
+    os.environ.pop("EVSYNC_DISABLE", None)
     out[phase] = [int(x) for x in open(log).read().split()]
 print(json.dumps(out))
 """
@@ -344,7 +349,8 @@ print(json.dumps(out))
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="probe uses LD_PRELOAD interposition (Linux)")
 def test_ready_event_is_synchronized_probe(tmp_path):
     # Interpose cudaEventSynchronize: Update must synchronize exactly the event it was given.
-    # The same check must fail when the event is withheld or a different event is passed.
+    # The same check must fail when the event is withheld, a different event is passed, or the
+    # right event is passed but its wait is removed (isolated mutant in the interposer).
     import json, shutil, subprocess
     cc = shutil.which("cc") or shutil.which("gcc")
     assert cc, "a C compiler is required for the probe"
@@ -361,6 +367,7 @@ def test_ready_event_is_synchronized_probe(tmp_path):
     assert waited("passed", out["ev"]), ("Update did not synchronize the given event", out)
     assert not waited("withheld", out["ev"]), ("the check passes without the event", out)
     assert not waited("wrong", out["ev"]) and waited("wrong", out["other"]), ("the check passes with a wrong event", out)
+    assert not waited("wait_disabled", out["ev"]), ("the check passes with the wait removed", out)
 
 
 def test_missing_library_is_an_error_at_load():

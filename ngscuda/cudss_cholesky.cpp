@@ -412,11 +412,11 @@ namespace ngla
       Check (a.DataCreate (handle, &data), "DataCreate");
       Check (a.MatrixCreateCsr (&A, nf, nf, nnzf, (void*)d_rowptr.Raw()->DevicePtr(), nullptr,
                                 (void*)d_col.Raw()->DevicePtr(), (void*)d_vals.Raw()->DevicePtr(),
-                                CUDA_R_32I, CUDA_R_64F, CUDSS_MTYPE_SPD, CUDSS_MVIEW_LOWER,
+                                CUDSS_R_32I, CUDSS_R_32I, CUDSS_R_64F, CUDSS_MTYPE_SPD, CUDSS_MVIEW_LOWER,
                                 CUDSS_BASE_ZERO), "MatrixCreateCsr");
-      Check (a.MatrixCreateDn (&B, nf, 1, nf, (void*)d_b.Raw()->DevicePtr(), CUDA_R_64F,
+      Check (a.MatrixCreateDn (&B, nf, 1, nf, (void*)d_b.Raw()->DevicePtr(), CUDSS_R_64F,
                                CUDSS_LAYOUT_COL_MAJOR), "MatrixCreateDn");
-      Check (a.MatrixCreateDn (&X, nf, 1, nf, (void*)d_x.Raw()->DevicePtr(), CUDA_R_64F,
+      Check (a.MatrixCreateDn (&X, nf, 1, nf, (void*)d_x.Raw()->DevicePtr(), CUDSS_R_64F,
                                CUDSS_LAYOUT_COL_MAJOR), "MatrixCreateDn");
       // the scratch belongs to this object's device context
       cudaPointerAttributes attr;

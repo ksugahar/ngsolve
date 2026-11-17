@@ -228,40 +228,84 @@ def test_device_csr_route_matches_host_route():
         for p in (prp, pcl, pv): cu.free(p)
 
 
-def test_ready_event_orders_a_producer_on_another_stream():
-    # Values only, production contract unchanged (an event-free Update synchronizes the device):
-    #  - control: no producer work submitted yet; event-free Update on the quiescent device gives
-    #    the solution for A, distinguishable from the one for 2*A;
-    #  - event case: the producer (2*A) is queued on a non-blocking stream with a recorded event;
-    #    Update with that event must give the 2*A solution.
-    # That Update waits on exactly the passed event is checked by the probe test below.
+def _gated_d2d_case():
+    # Runs in a child process (bounded by the parent's timeout). 2*A is uploaded to a device
+    # buffer first; then a gate in device memory is armed on a non-blocking producer stream
+    # (cuStreamWaitValue32, GEQ 1), the D2D publication into the caller's value buffer and the
+    # ready event are queued behind it, and a second stream opens the gate (cuStreamWriteValue32).
+    import json
     cu = Cudart()
+    drv = ctypes.CDLL("nvcuda.dll" if sys.platform.startswith("win") else "libcuda.so.1")
+    wait = getattr(drv, "cuStreamWaitValue32_v2", None) or drv.cuStreamWaitValue32
+    write = getattr(drv, "cuStreamWriteValue32_v2", None) or drv.cuStreamWriteValue32
     fes, a, f = problem()
     rp, cl, vv, (prp, pcl, pv) = device_csr(cu, a.mat, fes.ndof)
-    stream, ev = ctypes.c_void_p(), ctypes.c_void_p()
-    cu.check(cu.l.cudaStreamCreateWithFlags(ctypes.byref(stream), 1), "stream")
-    cu.check(cu.l.cudaEventCreate(ctypes.byref(ev)), "event")
     host2 = np.ascontiguousarray(2 * vv)
+    d2, flag = cu.malloc(host2.nbytes), cu.malloc(4)
+    stream, opener, ev = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    cu.check(cu.l.cudaStreamCreateWithFlags(ctypes.byref(stream), 1), "stream")
+    cu.check(cu.l.cudaStreamCreateWithFlags(ctypes.byref(opener), 1), "stream")
+    cu.check(cu.l.cudaEventCreate(ctypes.byref(ev)), "event")
+    out = {}
     try:
         chol = ngscuda.CuDSSCholesky(fes.ndof, len(cl), prp, pcl, pv, S.Lower, fes.FreeDofs())
         once = gpu_solve(chol, f.vec)                          # solution for A
         new = 0.5 * once                                       # solution for 2*A
-
-        chol.Update(prp, pcl, pv)                              # control: publication withheld on the host
+        chol.Update(prp, pcl, pv)                              # control: nothing published yet
         old_sol = gpu_solve(chol, f.vec)
-        assert rel(old_sol, once) <= 1e-12, ("control did not give the A solution", rel(old_sol, once))
-        assert rel(old_sol, new) > 1e-3, ("A and 2*A solutions not distinguishable", rel(old_sol, new))
+        out["control_vs_A"] = rel(old_sol, once)
+        out["control_vs_2A"] = rel(old_sol, new)
 
-        # now submit 2*A
-        cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(pv), host2.ctypes.data_as(ctypes.c_void_p),
-                                      ctypes.c_size_t(host2.nbytes), 1, stream), "produce")
+        cu.h2d(d2, host2)                                      # pre-upload 2*A
+        cu.check(cu.l.cudaMemset(ctypes.c_void_p(flag), 0, ctypes.c_size_t(4)), "gate reset")
+        cu.check(cu.l.cudaDeviceSynchronize(), "sync")
+        err = wait(stream, ctypes.c_uint64(flag), ctypes.c_uint32(1), ctypes.c_uint(0))   # CU_STREAM_WAIT_VALUE_GEQ
+        assert err == 0, f"cuStreamWaitValue32: driver error {err}"
+        cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(pv), ctypes.c_void_p(d2), ctypes.c_size_t(host2.nbytes),
+                                      3, stream), "publish D2D")
         cu.check(cu.l.cudaEventRecord(ev, stream), "record")
+        out["pending_before_open"] = cu.l.cudaEventQuery(ev) != 0  # the gate holds the publication
+        err = write(opener, ctypes.c_uint64(flag), ctypes.c_uint32(1), ctypes.c_uint(0))
+        assert err == 0, f"cuStreamWriteValue32: driver error {err}"
         chol.Update(prp, pcl, pv, ready_event=ev.value)
-        assert rel(gpu_solve(chol, f.vec), new) <= 1e-12, "update with the event did not see 2*A"
+        out["event_vs_2A"] = rel(gpu_solve(chol, f.vec), new)
     finally:
-        cu.l.cudaStreamSynchronize(stream)
-        cu.l.cudaStreamDestroy(stream); cu.l.cudaEventDestroy(ev)
-        for p in (prp, pcl, pv): cu.free(p)
+        write(opener, ctypes.c_uint64(flag), ctypes.c_uint32(1), ctypes.c_uint(0))   # never leave it held
+        cu.l.cudaStreamSynchronize(opener); cu.l.cudaStreamSynchronize(stream)
+        cu.l.cudaStreamDestroy(stream); cu.l.cudaStreamDestroy(opener); cu.l.cudaEventDestroy(ev)
+        for p in (prp, pcl, pv, d2, flag): cu.free(p)
+    print(json.dumps(out))
+
+
+GATED_CHILD = r"""
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("cudss_test_gated", sys.argv[1])
+t = importlib.util.module_from_spec(spec); spec.loader.exec_module(t)
+t._gated_d2d_case()
+"""
+
+
+def test_ready_event_orders_a_producer_on_another_stream(tmp_path):
+    # Values only, production contract unchanged (an event-free Update synchronizes the device):
+    #  - control: nothing published yet; event-free Update gives the A solution, distinguishable
+    #    from the 2*A one;
+    #  - event case: 2*A pre-uploaded, its D2D publication held behind a device-memory gate that a
+    #    second stream opens; Update with the recorded event must give the 2*A solution.
+    # Runs in a child process: a gate that never opens fails within the timeout instead of hanging.
+    # That Update waits on exactly the passed event is checked by the probe test below.
+    import json, subprocess
+    (tmp_path / "child.py").write_text(GATED_CHILD)
+    try:
+        r = subprocess.run([sys.executable, str(tmp_path / "child.py"), os.path.abspath(__file__)],
+                           capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        pytest.fail("gated producer did not complete within 180 s (gate never opened?)")
+    assert r.returncode == 0, r.stderr[-3000:]
+    out = json.loads(r.stdout.strip().splitlines()[-1])
+    assert out["control_vs_A"] <= 1e-12, ("control did not give the A solution", out)
+    assert out["control_vs_2A"] > 1e-3, ("A and 2*A solutions not distinguishable", out)
+    assert out["pending_before_open"], ("the gate did not hold the publication", out)
+    assert out["event_vs_2A"] <= 1e-12, ("update with the event did not see 2*A", out)
 
 
 EVSYNC_SHIM = r"""
@@ -282,7 +326,12 @@ int cudaEventSynchronize (void * e)
     }
   if (!real) { fprintf (stderr, "evsync shim: cudaEventSynchronize not found\n"); abort (); }
   const char * d = getenv ("EVSYNC_DISABLE");           /* mutant: drop the wait for this one event only */
-  if (d && strtoull (d, 0, 10) == (unsigned long long)(uintptr_t) e) return 0;
+  if (d && strtoull (d, 0, 10) == (unsigned long long)(uintptr_t) e)
+    {
+      const char * h = getenv ("EVSYNC_SUPPRESSED");
+      if (h) { FILE * f = fopen (h, "a"); if (f) { fprintf (f, "%llu\n", (unsigned long long)(uintptr_t) e); fclose (f); } }
+      return 0;
+    }
   const char * p = getenv ("EVSYNC_LOG");
   if (p) { FILE * f = fopen (p, "a"); if (f) { fprintf (f, "%llu\n", (unsigned long long)(uintptr_t) e); fclose (f); } }
   return real (e);
@@ -304,15 +353,17 @@ for e in (ev, other):
     cu.check(cu.l.cudaEventRecord(e, stream), "record")
 cu.check(cu.l.cudaStreamSynchronize(stream), "sync")
 log = os.environ["EVSYNC_LOG"]
+hits = os.environ["EVSYNC_SUPPRESSED"]
 out = {"ev": ev.value, "other": other.value}
 for phase, kw in (("passed", {"ready_event": ev.value}), ("withheld", {}), ("wrong", {"ready_event": other.value}),
                   ("wait_disabled", {"ready_event": ev.value})):
-    open(log, "w").close()
+    open(log, "w").close(); open(hits, "w").close()
     if phase == "wait_disabled":
         os.environ["EVSYNC_DISABLE"] = str(ev.value)
     chol.Update(prp, pcl, pv, **kw)
     os.environ.pop("EVSYNC_DISABLE", None)
     out[phase] = [int(x) for x in open(log).read().split()]
+    out[phase + "_suppressed"] = [int(x) for x in open(hits).read().split()]
 print(json.dumps(out))
 """
 
@@ -329,7 +380,8 @@ def test_ready_event_is_synchronized_probe(tmp_path):
     (tmp_path / "evsync.c").write_text(EVSYNC_SHIM)
     subprocess.run([cc, "-shared", "-fPIC", "-O2", "-o", str(shim), str(tmp_path / "evsync.c"), "-ldl"], check=True)
     (tmp_path / "child.py").write_text(EVSYNC_CHILD)
-    env = dict(os.environ, LD_PRELOAD=str(shim), EVSYNC_LOG=str(tmp_path / "evsync.log"))
+    env = dict(os.environ, LD_PRELOAD=str(shim), EVSYNC_LOG=str(tmp_path / "evsync.log"),
+               EVSYNC_SUPPRESSED=str(tmp_path / "evsync.suppressed"))
     r = subprocess.run([sys.executable, str(tmp_path / "child.py"), os.path.abspath(__file__)],
                        env=env, capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, r.stderr[-3000:]
@@ -338,7 +390,9 @@ def test_ready_event_is_synchronized_probe(tmp_path):
     assert waited("passed", out["ev"]), ("Update did not synchronize the given event", out)
     assert not waited("withheld", out["ev"]), ("the check passes without the event", out)
     assert not waited("wrong", out["ev"]) and waited("wrong", out["other"]), ("the check passes with a wrong event", out)
+    assert out["wait_disabled_suppressed"] == [out["ev"]], ("the mutant did not suppress the target wait", out)
     assert not waited("wait_disabled", out["ev"]), ("the check passes with the wait removed", out)
+    assert all(not out[p + "_suppressed"] for p in ("passed", "withheld", "wrong")), ("suppression outside the mutant", out)
 
 
 def test_missing_library_is_an_error_at_load():

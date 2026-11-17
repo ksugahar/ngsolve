@@ -103,19 +103,20 @@ def test_update_equals_fresh_factorization():
 
 
 def test_update_refuses_changed_pattern_same_nnz():
-    fes, a, f = problem()
-    full, lower, upper = full_lower_upper(a, fes.ndof)
-    chol = ngscuda.CuDSSCholesky(lower, fes.FreeDofs(), S.Lower)
-    r, c, v = coo(lower)
-    k = np.flatnonzero(r != c)[0]          # move one off-diagonal entry to another column
-    c2 = c.copy(); c2[k] = (c[k] + 1) % (r[k] + 1) if (c[k] + 1) % (r[k] + 1) != c[k] else 0
-    moved = from_coo(r, c2, v, fes.ndof)
-    if moved.nze != lower.nze:
-        pytest.skip("could not build a same-nnz pattern change for this mesh")
+    # all-free 4x4 SPD, lower storage: diag 4, one -1 moved (2,0) -> (2,1); same nnz and row offsets
+    n = 4
+    free = BitArray(n); free.Set()
+    def lower4(col):
+        return from_coo([0, 1, 2, 3, 2], [0, 1, 2, 3, col], [4.0, 4.0, 4.0, 4.0, -1.0], n)
+    a, moved = lower4(0), lower4(1)
+    ra, ca, _ = a.CSR(); rm, cm, _ = moved.CSR()
+    assert a.nze == moved.nze and list(ra) == list(rm) and list(ca) != list(cm), (list(ra), list(ca), list(rm), list(cm))
+    chol = ngscuda.CuDSSCholesky(a, free, S.Lower)
+    f = a.CreateVector(); f.FV().NumPy()[:] = 1.0
     with pytest.raises(Exception, match="pattern changed"):
         chol.Update(moved)
     with pytest.raises(Exception, match="no valid factorization"):
-        gpu_solve(chol, f.vec)
+        gpu_solve(chol, f)
 
 
 def test_refusals():

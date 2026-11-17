@@ -228,54 +228,139 @@ def test_device_csr_route_matches_host_route():
         for p in (prp, pcl, pv): cu.free(p)
 
 
+class StreamGate:
+    """The producer stream waits (cuStreamWaitValue32, GEQ 1) on a host-mapped flag until the host opens it."""
+    def __init__(self, cu, stream):
+        self.cu, self.stream = cu, stream
+        drv = ctypes.CDLL("nvcuda.dll" if sys.platform.startswith("win") else "libcuda.so.1")
+        self.wait = getattr(drv, "cuStreamWaitValue32_v2", None) or drv.cuStreamWaitValue32
+        self.write = getattr(drv, "cuStreamWriteValue32_v2", None) or drv.cuStreamWriteValue32
+        self.host = ctypes.c_void_p()
+        cu.check(cu.l.cudaHostAlloc(ctypes.byref(self.host), ctypes.c_size_t(4), 2), "cudaHostAlloc mapped")  # cudaHostAllocMapped
+        self.flag = (ctypes.c_uint32 * 1).from_address(self.host.value)
+        self.flag[0] = 0
+        self.dev = ctypes.c_void_p()
+        cu.check(cu.l.cudaHostGetDevicePointer(ctypes.byref(self.dev), self.host, 0), "cudaHostGetDevicePointer")
+
+    def hold(self):
+        assert self.flag[0] == 0
+        err = self.wait(self.stream, ctypes.c_uint64(self.dev.value), ctypes.c_uint32(1), ctypes.c_uint(0))  # CU_STREAM_WAIT_VALUE_GEQ
+        assert err == 0, f"cuStreamWaitValue32: driver error {err}"
+
+    def open(self):
+        self.flag[0] = 1
+
+    def open_from(self, stream):
+        # the device opens the gate from another stream: Update holds the GIL, a Python thread could not
+        err = self.write(stream, ctypes.c_uint64(self.dev.value), ctypes.c_uint32(1), ctypes.c_uint(0))
+        assert err == 0, f"cuStreamWriteValue32: driver error {err}"
+
+    def free(self):
+        self.cu.l.cudaFreeHost(self.host)
+
+
 def test_ready_event_orders_a_producer_on_another_stream():
-    # The producer writes 2*A into the caller's value buffer on a non-blocking stream,
-    # behind ~tens of ms of large device copies. With the event the update sees 2*A;
-    # without it the update reads before the producer (stale A): the control must differ.
+    # Values only, production contract unchanged (an event-free Update synchronizes the device):
+    #  - control: no producer work submitted yet; event-free Update on the quiescent device gives
+    #    the solution for A, distinguishable from the one for 2*A;
+    #  - event case: the producer (2*A) is held on a non-blocking stream by an explicit gate that
+    #    a second stream opens; Update with the recorded event must give the 2*A solution.
+    # That Update waits on exactly the passed event is checked by the probe test below.
     cu = Cudart()
     fes, a, f = problem()
     rp, cl, vv, (prp, pcl, pv) = device_csr(cu, a.mat, fes.ndof)
-    big = 1 << 30
-    src, dst = cu.malloc(big), cu.malloc(big)
-    stream, ev = ctypes.c_void_p(), ctypes.c_void_p()
+    stream, opener, ev = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
     cu.check(cu.l.cudaStreamCreateWithFlags(ctypes.byref(stream), 1), "stream")
+    cu.check(cu.l.cudaStreamCreateWithFlags(ctypes.byref(opener), 1), "stream")
     cu.check(cu.l.cudaEventCreate(ctypes.byref(ev)), "event")
+    gate = StreamGate(cu, stream)
     host2 = np.ascontiguousarray(2 * vv)
     try:
-        # size the delay from the measured copy time (fast GPUs finish a fixed count in ms)
-        t0, t1 = ctypes.c_void_p(), ctypes.c_void_p()
-        cu.check(cu.l.cudaEventCreate(ctypes.byref(t0)), "event"); cu.check(cu.l.cudaEventCreate(ctypes.byref(t1)), "event")
-        cu.check(cu.l.cudaEventRecord(t0, stream), "record")
-        cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(dst), ctypes.c_void_p(src), ctypes.c_size_t(big), 3, stream), "delay")
-        cu.check(cu.l.cudaEventRecord(t1, stream), "record")
-        cu.check(cu.l.cudaEventSynchronize(t1), "sync")
-        ms = ctypes.c_float()
-        cu.check(cu.l.cudaEventElapsedTime(ctypes.byref(ms), t0, t1), "elapsed")
-        cu.l.cudaEventDestroy(t0); cu.l.cudaEventDestroy(t1)
-        ncopy = max(16, int(np.ceil(1000.0 / max(ms.value, 1e-3))))   # >= about 1 s on the producer stream
-
-        def produce():
-            cu.h2d(pv, vv)                                     # back to A, synchronously
-            for _ in range(ncopy):                             # delay on the producer stream
-                cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(dst), ctypes.c_void_p(src), ctypes.c_size_t(big), 3, stream), "delay")
-            cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(pv), host2.ctypes.data_as(ctypes.c_void_p),
-                                          ctypes.c_size_t(host2.nbytes), 1, stream), "produce")
-            cu.check(cu.l.cudaEventRecord(ev, stream), "record")
-
         chol = ngscuda.CuDSSCholesky(fes.ndof, len(cl), prp, pcl, pv, S.Lower, fes.FreeDofs())
-        once = gpu_solve(chol, f.vec)
-        produce()
+        once = gpu_solve(chol, f.vec)                          # solution for A
+        new = 0.5 * once                                       # solution for 2*A
+
+        chol.Update(prp, pcl, pv)                              # control: publication withheld on the host
+        old_sol = gpu_solve(chol, f.vec)
+        assert rel(old_sol, once) <= 1e-12, ("control did not give the A solution", rel(old_sol, once))
+        assert rel(old_sol, new) > 1e-3, ("A and 2*A solutions not distinguishable", rel(old_sol, new))
+
+        gate.hold()                                            # now submit 2*A behind the gate
+        cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(pv), host2.ctypes.data_as(ctypes.c_void_p),
+                                      ctypes.c_size_t(host2.nbytes), 1, stream), "produce")
+        cu.check(cu.l.cudaEventRecord(ev, stream), "record")
+        gate.open_from(opener)
         chol.Update(prp, pcl, pv, ready_event=ev.value)
-        assert rel(gpu_solve(chol, f.vec), 0.5 * once) <= 1e-12, "update with the event did not see 2*A"
-        cu.check(cu.l.cudaDeviceSynchronize(), "sync")
-        produce()
-        chol.Update(prp, pcl, pv)                              # control: event withheld
-        stale = rel(gpu_solve(chol, f.vec), 0.5 * once)
-        cu.check(cu.l.cudaDeviceSynchronize(), "sync")
-        assert stale > 1e-3, "control without the event was not stale: the ordering test has no teeth"
+        assert rel(gpu_solve(chol, f.vec), new) <= 1e-12, "update with the event did not see 2*A"
     finally:
-        cu.l.cudaStreamDestroy(stream); cu.l.cudaEventDestroy(ev)
-        for p in (prp, pcl, pv, src, dst): cu.free(p)
+        gate.open()                                            # never leave the stream held
+        cu.l.cudaStreamSynchronize(stream); cu.l.cudaStreamSynchronize(opener)
+        cu.l.cudaStreamDestroy(stream); cu.l.cudaStreamDestroy(opener); cu.l.cudaEventDestroy(ev)
+        gate.free()
+        for p in (prp, pcl, pv): cu.free(p)
+
+
+EVSYNC_SHIM = r"""
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+typedef int (*sync_fn)(void *);
+int cudaEventSynchronize (void * e)
+{
+  static sync_fn real;
+  if (!real) real = (sync_fn) dlsym (RTLD_NEXT, "cudaEventSynchronize");
+  const char * p = getenv ("EVSYNC_LOG");
+  if (p) { FILE * f = fopen (p, "a"); if (f) { fprintf (f, "%llu\n", (unsigned long long)(uintptr_t) e); fclose (f); } }
+  return real (e);
+}
+"""
+
+EVSYNC_CHILD = r"""
+import ctypes, json, os, sys
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import test_cudss_cholesky as t
+cu = t.Cudart()
+fes, a, f = t.problem()
+rp, cl, vv, (prp, pcl, pv) = t.device_csr(cu, a.mat, fes.ndof)
+chol = t.ngscuda.CuDSSCholesky(fes.ndof, len(cl), prp, pcl, pv, t.S.Lower, fes.FreeDofs())
+stream, ev, other = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+cu.check(cu.l.cudaStreamCreateWithFlags(ctypes.byref(stream), 1), "stream")
+for e in (ev, other):
+    cu.check(cu.l.cudaEventCreate(ctypes.byref(e)), "event")
+    cu.check(cu.l.cudaEventRecord(e, stream), "record")
+cu.check(cu.l.cudaStreamSynchronize(stream), "sync")
+log = os.environ["EVSYNC_LOG"]
+out = {"ev": ev.value, "other": other.value}
+for phase, kw in (("passed", {"ready_event": ev.value}), ("withheld", {}), ("wrong", {"ready_event": other.value})):
+    open(log, "w").close()
+    chol.Update(prp, pcl, pv, **kw)
+    out[phase] = [int(x) for x in open(log).read().split()]
+print(json.dumps(out))
+"""
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="probe uses LD_PRELOAD interposition (Linux)")
+def test_ready_event_is_synchronized_probe(tmp_path):
+    # Interpose cudaEventSynchronize: Update must synchronize exactly the event it was given.
+    # The same check must fail when the event is withheld or a different event is passed.
+    import json, shutil, subprocess
+    cc = shutil.which("cc") or shutil.which("gcc")
+    assert cc, "a C compiler is required for the probe"
+    shim = tmp_path / "evsync.so"
+    (tmp_path / "evsync.c").write_text(EVSYNC_SHIM)
+    subprocess.run([cc, "-shared", "-fPIC", "-O2", "-o", str(shim), str(tmp_path / "evsync.c"), "-ldl"], check=True)
+    (tmp_path / "child.py").write_text(EVSYNC_CHILD)
+    env = dict(os.environ, LD_PRELOAD=str(shim), EVSYNC_LOG=str(tmp_path / "evsync.log"))
+    r = subprocess.run([sys.executable, str(tmp_path / "child.py"), os.path.abspath(__file__)],
+                       env=env, capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, r.stderr[-3000:]
+    out = json.loads(r.stdout.strip().splitlines()[-1])
+    waited = lambda phase, e: e in out[phase]
+    assert waited("passed", out["ev"]), ("Update did not synchronize the given event", out)
+    assert not waited("withheld", out["ev"]), ("the check passes without the event", out)
+    assert not waited("wrong", out["ev"]) and waited("wrong", out["other"]), ("the check passes with a wrong event", out)
 
 
 def test_missing_library_is_an_error_at_load():

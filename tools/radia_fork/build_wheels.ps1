@@ -111,7 +111,7 @@ Step "ngsolve repair" { & $py -m delvewheel repair --ignore-existing --namespace
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 foreach ($w in Get-ChildItem "$Wh\*.whl") {
   $z = [IO.Compression.ZipFile]::OpenRead($w.FullName)
-  try { $bad = @($z.Entries | Where-Object { $_.Name -match '^(cudss|cublas|cublasLt|cudart|nvrtc|nvcuda)[0-9_A-Za-z]*\.(dll|so)' }) } finally { $z.Dispose() }
+  try { $bad = @($z.Entries | Where-Object { $_.Name -match '^(lib)?(cudss|cublas|cudart|nvrtc|nvcuda)[0-9A-Za-z_.-]*\.(dll|so)(\.[0-9.]+)?$' }) } finally { $z.Dispose() }
   if ($bad.Count) { throw "$($w.Name) bundles NVIDIA libraries: $($bad.Name -join ', ')" } }
 $receipt.wheels = @(Get-ChildItem "$Wh\*.whl" | ForEach-Object { [ordered]@{ name = $_.Name; sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() } })
 $receipt | ConvertTo-Json -Depth 4 | Set-Content "$Out\receipt.json"

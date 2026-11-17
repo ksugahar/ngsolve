@@ -1653,7 +1653,7 @@ namespace ngla
 
     for (auto i : range)
       {
-        int first = firstinrow[i] + range.end()-i-1;
+        size_t first = firstinrow[i] + range.end()-i-1;
 
         FlatVector<> ext_lfact (extdofs.Size(), &lfact[first]);
         temp += hy(i) * ext_lfact;
@@ -1685,13 +1685,13 @@ namespace ngla
 
     for (int i = blocks[bnr+1]-1; i >= blocks[bnr]; i--)
       {
-	int minj = hfirstinrow[i];
-	int maxj = hfirstinrow[i+1];
-	int j_ri = hfirstinrow_ri[i];
+	size_t minj = hfirstinrow[i];
+	size_t maxj = hfirstinrow[i+1];
+	size_t j_ri = hfirstinrow_ri[i];
 
 	double sum = 0;
 
-	for (int j = minj; j < maxj; j++, j_ri++)
+	for (size_t j = minj; j < maxj; j++, j_ri++)
 	  sum += lfact[j] * hy(rowindex2[j_ri]);
 	
 	hy(i) -= sum;

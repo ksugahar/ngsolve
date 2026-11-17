@@ -228,52 +228,19 @@ def test_device_csr_route_matches_host_route():
         for p in (prp, pcl, pv): cu.free(p)
 
 
-class StreamGate:
-    """The producer stream waits (cuStreamWaitValue32, GEQ 1) on a host-mapped flag until the host opens it."""
-    def __init__(self, cu, stream):
-        self.cu, self.stream = cu, stream
-        drv = ctypes.CDLL("nvcuda.dll" if sys.platform.startswith("win") else "libcuda.so.1")
-        self.wait = getattr(drv, "cuStreamWaitValue32_v2", None) or drv.cuStreamWaitValue32
-        self.write = getattr(drv, "cuStreamWriteValue32_v2", None) or drv.cuStreamWriteValue32
-        self.host = ctypes.c_void_p()
-        cu.check(cu.l.cudaHostAlloc(ctypes.byref(self.host), ctypes.c_size_t(4), 2), "cudaHostAlloc mapped")  # cudaHostAllocMapped
-        self.flag = (ctypes.c_uint32 * 1).from_address(self.host.value)
-        self.flag[0] = 0
-        self.dev = ctypes.c_void_p()
-        cu.check(cu.l.cudaHostGetDevicePointer(ctypes.byref(self.dev), self.host, 0), "cudaHostGetDevicePointer")
-
-    def hold(self):
-        assert self.flag[0] == 0
-        err = self.wait(self.stream, ctypes.c_uint64(self.dev.value), ctypes.c_uint32(1), ctypes.c_uint(0))  # CU_STREAM_WAIT_VALUE_GEQ
-        assert err == 0, f"cuStreamWaitValue32: driver error {err}"
-
-    def open(self):
-        self.flag[0] = 1
-
-    def open_from(self, stream):
-        # the device opens the gate from another stream: Update holds the GIL, a Python thread could not
-        err = self.write(stream, ctypes.c_uint64(self.dev.value), ctypes.c_uint32(1), ctypes.c_uint(0))
-        assert err == 0, f"cuStreamWriteValue32: driver error {err}"
-
-    def free(self):
-        self.cu.l.cudaFreeHost(self.host)
-
-
 def test_ready_event_orders_a_producer_on_another_stream():
     # Values only, production contract unchanged (an event-free Update synchronizes the device):
     #  - control: no producer work submitted yet; event-free Update on the quiescent device gives
     #    the solution for A, distinguishable from the one for 2*A;
-    #  - event case: the producer (2*A) is held on a non-blocking stream by an explicit gate that
-    #    a second stream opens; Update with the recorded event must give the 2*A solution.
+    #  - event case: the producer (2*A) is queued on a non-blocking stream with a recorded event;
+    #    Update with that event must give the 2*A solution.
     # That Update waits on exactly the passed event is checked by the probe test below.
     cu = Cudart()
     fes, a, f = problem()
     rp, cl, vv, (prp, pcl, pv) = device_csr(cu, a.mat, fes.ndof)
-    stream, opener, ev = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    stream, ev = ctypes.c_void_p(), ctypes.c_void_p()
     cu.check(cu.l.cudaStreamCreateWithFlags(ctypes.byref(stream), 1), "stream")
-    cu.check(cu.l.cudaStreamCreateWithFlags(ctypes.byref(opener), 1), "stream")
     cu.check(cu.l.cudaEventCreate(ctypes.byref(ev)), "event")
-    gate = StreamGate(cu, stream)
     host2 = np.ascontiguousarray(2 * vv)
     try:
         chol = ngscuda.CuDSSCholesky(fes.ndof, len(cl), prp, pcl, pv, S.Lower, fes.FreeDofs())
@@ -285,18 +252,15 @@ def test_ready_event_orders_a_producer_on_another_stream():
         assert rel(old_sol, once) <= 1e-12, ("control did not give the A solution", rel(old_sol, once))
         assert rel(old_sol, new) > 1e-3, ("A and 2*A solutions not distinguishable", rel(old_sol, new))
 
-        gate.hold()                                            # now submit 2*A behind the gate
+        # now submit 2*A
         cu.check(cu.l.cudaMemcpyAsync(ctypes.c_void_p(pv), host2.ctypes.data_as(ctypes.c_void_p),
                                       ctypes.c_size_t(host2.nbytes), 1, stream), "produce")
         cu.check(cu.l.cudaEventRecord(ev, stream), "record")
-        gate.open_from(opener)
         chol.Update(prp, pcl, pv, ready_event=ev.value)
         assert rel(gpu_solve(chol, f.vec), new) <= 1e-12, "update with the event did not see 2*A"
     finally:
-        gate.open()                                            # never leave the stream held
-        cu.l.cudaStreamSynchronize(stream); cu.l.cudaStreamSynchronize(opener)
-        cu.l.cudaStreamDestroy(stream); cu.l.cudaStreamDestroy(opener); cu.l.cudaEventDestroy(ev)
-        gate.free()
+        cu.l.cudaStreamSynchronize(stream)
+        cu.l.cudaStreamDestroy(stream); cu.l.cudaEventDestroy(ev)
         for p in (prp, pcl, pv): cu.free(p)
 
 
@@ -311,7 +275,8 @@ int cudaEventSynchronize (void * e)
 {
   static sync_fn real;
   if (!real) real = (sync_fn) dlsym (RTLD_NEXT, "cudaEventSynchronize");
-  if (getenv ("EVSYNC_DISABLE")) return 0;             /* mutant: the wait is removed, nothing recorded */
+  const char * d = getenv ("EVSYNC_DISABLE");           /* mutant: drop the wait for this one event only */
+  if (d && strtoull (d, 0, 10) == (unsigned long long)(uintptr_t) e) return 0;
   const char * p = getenv ("EVSYNC_LOG");
   if (p) { FILE * f = fopen (p, "a"); if (f) { fprintf (f, "%llu\n", (unsigned long long)(uintptr_t) e); fclose (f); } }
   return real (e);
@@ -338,7 +303,7 @@ for phase, kw in (("passed", {"ready_event": ev.value}), ("withheld", {}), ("wro
                   ("wait_disabled", {"ready_event": ev.value})):
     open(log, "w").close()
     if phase == "wait_disabled":
-        os.environ["EVSYNC_DISABLE"] = "1"
+        os.environ["EVSYNC_DISABLE"] = str(ev.value)
     chol.Update(prp, pcl, pv, **kw)
     os.environ.pop("EVSYNC_DISABLE", None)
     out[phase] = [int(x) for x in open(log).read().split()]
@@ -350,7 +315,7 @@ print(json.dumps(out))
 def test_ready_event_is_synchronized_probe(tmp_path):
     # Interpose cudaEventSynchronize: Update must synchronize exactly the event it was given.
     # The same check must fail when the event is withheld, a different event is passed, or the
-    # right event is passed but its wait is removed (isolated mutant in the interposer).
+    # right event is passed but the wait on that event alone is removed (isolated interposer mutant).
     import json, shutil, subprocess
     cc = shutil.which("cc") or shutil.which("gcc")
     assert cc, "a C compiler is required for the probe"

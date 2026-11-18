@@ -1632,7 +1632,7 @@ namespace ngla
   }
 
   template <> template <>
-  void SparseCholesky<double> :: 
+  NGS_DLL_HEADER void SparseCholesky<double> ::
   SolveBlock (int bnr, FlatVector<double> hy) const
   {
     auto range = BlockDofs (bnr);
@@ -1676,7 +1676,7 @@ namespace ngla
 
 
   template <> template <>
-  void SparseCholesky<double> :: 
+  NGS_DLL_HEADER void SparseCholesky<double> ::
   SolveBlockT (int bnr, FlatVector<double> hy) const
   {
     const size_t * hfirstinrow = &firstinrow[0];

@@ -31,11 +31,12 @@ python -m pip install -q --no-index --no-deps "$b"/out/wheelhouse/*.whl
 python -m pip check > pip-check.txt
 python -m pip freeze > freeze.txt
 phase=import
+python -I "$JOB_ROOT/source/tools/flow2/no_cuda_mapped.py" no-cuda.json   # before any explicit GPU import
 python -I -c 'import json, ngsolve, netgen; print(json.dumps({"ngsolve": ngsolve.__file__, "netgen": netgen.__file__, "version": ngsolve.__version__}))' > import.json
 python -I -c 'import netgen.occ as o; b = o.Box(o.Pnt(0,0,0), o.Pnt(1,2,3)); assert abs(b.mass - 6) < 1e-12, b.mass; print("occ box volume", b.mass)' > occ.txt
 phase=bench
 cp "$JOB_ROOT/source/tools/flow2/type1_bench.py" bench.py
 python -I bench.py | tee perf.log
-sha256sum validated-wheels.json wheel-verify.txt import.json occ.txt pip-check.txt freeze.txt result.json perf.log \
+sha256sum validated-wheels.json wheel-verify.txt import.json no-cuda.json occ.txt pip-check.txt freeze.txt result.json perf.log \
   bench.py cpu.txt numa.txt allocation.txt > evidence.sha256
 phase=complete

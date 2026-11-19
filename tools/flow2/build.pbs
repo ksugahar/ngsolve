@@ -58,7 +58,7 @@ args=(WHEELHOUSE="$JOB_ROOT/wheelhouse-build" REQUIREMENTS="$JOB_ROOT/source/too
 if [ "$machine" = aarch64 ]; then
   inc="$run/job/venv/lib/python3.12/site-packages/nvidia/cu12/include"
   args+=(OCC_SOURCE="$JOB_ROOT/occ/V8_0_1.zip" NVPL_LIB="$nvpl" CUDA_ROOT="$cuda" CUDA_ARCH="$arch" CUDSS_INCLUDE="$inc"
-    CUDA_REQUIREMENTS="nvidia-cuda-runtime-cu12==12.8.57;;nvidia-cuda-nvrtc-cu12==12.8.61;;nvidia-cudss-cu12==0.8.0.10;;nvidia-cublas-cu12==12.8.3.14"
+    CUDA_REQUIREMENTS="nvidia-cuda-runtime-cu12==12.8.57;;nvidia-cuda-nvrtc-cu12==12.8.61;;nvidia-cudss-cu12==0.8.0.10;;nvidia-cublas-cu12==12.8.3.14;;nvidia-nvjitlink-cu12==12.8.61"
     LD_LIBRARY_PATH="$nvpl:$cuda/lib64")
   "$cuda/bin/nvcc" --version > nvcc.txt
 else

@@ -1,4 +1,5 @@
 import json
+import sys
 import math
 import ngsolve
 from ngsolve.ngstd import GetGPUDevice
@@ -23,5 +24,6 @@ gpu_matrix.Mult(gpu_x, gpu_y)
 expected = reference.FV().NumPy()
 error = float(np.linalg.norm(gpu_y.FV().NumPy() - expected) / np.linalg.norm(expected))
 report = dict(device=device.name, ngsolve=ngsolve.__file__, ndof=space.ndof, spmv_rel_err=error)
-print(json.dumps(report))
+# ngscuda prints a device query on stdout: write the record to the file argument
+json.dump(report, open(sys.argv[1], "w"))
 assert math.isfinite(error) and error < 1e-12

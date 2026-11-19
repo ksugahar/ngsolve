@@ -49,7 +49,8 @@ python -m pip check > pip-check.txt
 python -m pip freeze > freeze.txt
 phase=import
 cd "$run"   # never import from the checkout
-python -I -c 'import json, ngsolve, netgen, ngsolve.ngscuda as c; print(json.dumps({"ngsolve": ngsolve.__file__, "netgen": netgen.__file__, "version": ngsolve.__version__, "cudss": hasattr(c, "CuDSSCholesky")}))' > import.json
+# ngscuda prints a device query on stdout: write the record to the file directly
+python -I -c 'import json, sys, ngsolve, netgen, ngsolve.ngscuda as c; json.dump({"ngsolve": ngsolve.__file__, "netgen": netgen.__file__, "version": ngsolve.__version__, "cudss": hasattr(c, "CuDSSCholesky")}, open(sys.argv[1], "w"))' import.json
 python -I - "$JOB_ROOT" import.json <<'PY'
 import json, sys
 r = json.load(open(sys.argv[2]))
@@ -62,7 +63,7 @@ nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader > g
 test "$(wc -l < gpu.txt)" -eq 1
 grep -q "$expect_name" gpu.txt
 grep -q ", $expect_cc," gpu.txt
-python -I "$JOB_ROOT/source/tools/flow2/gpu_smoke.py" > gpu-smoke.json
+python -I "$JOB_ROOT/source/tools/flow2/gpu_smoke.py" gpu-smoke.json
 phase=pytest
 src=$JOB_ROOT/source/tests/pytest
 python -I -m pytest -v -rs -p no:cacheprovider "$src/test_cudss_cholesky.py" --junitxml pytest-cudss.xml > pytest-cudss.log 2>&1

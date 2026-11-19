@@ -54,7 +54,12 @@ fi
 "$PY" -m pip freeze > "$OUT/build-freeze.txt"
 DIST=$JOB/dist; WH=$OUT/wheelhouse; mkdir -p "$DIST" "$WH"; rm -f "$DIST"/*.whl
 
-NG_ARGS=(-Ccmake.define.USE_GUI=OFF -Ccmake.define.USE_CCACHE=OFF -Ccmake.define.USE_MPI=OFF)
+# pin the interpreter and its headers: a node may carry other Python versions' headers
+PY_INC=$("$PY" -c "import sysconfig; print(sysconfig.get_path('include'))")
+[ -f "$PY_INC/Python.h" ] || { echo "no Python.h in $PY_INC" >&2; exit 1; }
+PY_ARGS=(-Ccmake.define.Python3_EXECUTABLE="$PY" -Ccmake.define.Python3_INCLUDE_DIR="$PY_INC"
+  -Ccmake.define.Python3_FIND_UNVERSIONED_NAMES=NEVER)
+NG_ARGS=(-Ccmake.define.USE_GUI=OFF -Ccmake.define.USE_CCACHE=OFF -Ccmake.define.USE_MPI=OFF "${PY_ARGS[@]}")
 if [ -n "${OCC_SOURCE:-}" ]; then
   # static OpenCASCADE with the module set of Netgen's own BUILD_OCC superbuild
   step "occ"
@@ -126,7 +131,7 @@ export NGSOLVE_EXTRA_REQUIREMENTS
 
 step "ngsolve wheel"
 (cd "$NGSOLVE" && "$PY" -m build --wheel --no-isolation --outdir "$DIST" -Cbuild-dir="$JOB/b-ngsolve" \
-   -Ccmake.define.USE_CCACHE=OFF -Ccmake.define.Python3_EXECUTABLE="$PY" "${BLAS_ARGS[@]}" "${CUDA_ARGS[@]}" .)
+   -Ccmake.define.USE_CCACHE=OFF "${PY_ARGS[@]}" "${BLAS_ARGS[@]}" "${CUDA_ARGS[@]}" .)
 step "ngsolve repair"
 "$PY" -m auditwheel repair --exclude 'libTK*' --exclude 'libngcore.so' --exclude 'libnglib.so' "${EXCLUDE[@]}" -w "$WH" "$DIST"/ngsolve-*.whl
 

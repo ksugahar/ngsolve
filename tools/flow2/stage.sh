@@ -60,7 +60,9 @@ json.dump({"owner": owner, "request": request, "source_sha": sha, "netgen_sha": 
            "machine": machine, "scope": scope},
           open(f"{root}/owner.json", "w"), indent=2)
 PY
-(cd "$root" && { find wheelhouse-build wheelhouse-validate -type f; ls occ/*.zip 2>/dev/null;
+(cd "$root" && { find wheelhouse-build wheelhouse-validate -type f; [ ! -d occ ] || find occ -type f;
   echo source/external_dependencies/netgen/external_dependencies/v1.3.1.zip; echo source-heads.txt; echo owner.json; } \
   | sort | xargs sha256sum > inputs.sha256)
+n=$(find "$root/wheelhouse-build" "$root/wheelhouse-validate" -type f | wc -l)
+test "$(wc -l < "$root/inputs.sha256")" -eq $(( n + 3 + $([ "$machine" = aarch64 ] && echo 1 || echo 0) ))
 echo "staged $root at ngsolve $sha netgen $ng_sha ($machine)"

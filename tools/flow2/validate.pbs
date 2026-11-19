@@ -49,6 +49,7 @@ python -m pip check > pip-check.txt
 python -m pip freeze > freeze.txt
 phase=import
 cd "$run"   # never import from the checkout
+python -I "$JOB_ROOT/source/tools/flow2/no_cuda_mapped.py" no-cuda.json   # before any explicit GPU import
 # ngscuda prints a device query on stdout: write the record to the file directly
 python -I -c 'import json, sys, ngsolve, netgen, ngsolve.ngscuda as c; json.dump({"ngsolve": ngsolve.__file__, "netgen": netgen.__file__, "version": ngsolve.__version__, "cudss": hasattr(c, "CuDSSCholesky")}, open(sys.argv[1], "w"))' import.json
 python -I - "$JOB_ROOT" import.json <<'PY'
@@ -76,6 +77,6 @@ for f, n in (("pytest-cudss.xml", 18), ("pytest-bfv.xml", 6)):
     got = {k: int(s.get(k)) for k in ("tests", "failures", "errors", "skipped")}
     assert got == {"tests": n, "failures": 0, "errors": 0, "skipped": 0}, (f, got)
 PY
-sha256sum validated-wheels.json wheel-verify.txt import.json occ.txt gpu.txt gpu-smoke.json pip-check.txt freeze.txt \
+sha256sum validated-wheels.json wheel-verify.txt import.json no-cuda.json occ.txt gpu.txt gpu-smoke.json pip-check.txt freeze.txt \
   pytest-cudss.xml pytest-bfv.xml pytest-cudss.log pytest-bfv.log allocation.txt > evidence.sha256
 phase=complete

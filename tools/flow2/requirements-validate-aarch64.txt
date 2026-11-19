@@ -7,6 +7,7 @@ nvidia-cublas-cu12==12.8.3.14 --hash=sha256:93a4e0e386cc7f6e56c822531396de8170ed
 nvidia-cuda-nvrtc-cu12==12.8.61 --hash=sha256:b1f376bf58111ca73dde4fd4df89a462b164602e074a76a2c29c121ca478dcd4
 nvidia-cuda-runtime-cu12==12.8.57 --hash=sha256:534ccebd967b6a44292678fa5da4f00666029cb2ed07a79515ea41ef31fe3ec7
 nvidia-cudss-cu12==0.8.0.10 --hash=sha256:a806e6e7dbeba6fce64018e76e6deee19471b44ce4daec018c18d42bb08493a5
+nvidia-nvjitlink-cu12==12.8.61 --hash=sha256:9b80ecab31085dda3ce3b41d043be0ec739216c3fc633b8abe212d5a30026df0
 packaging==26.3 --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
 pluggy==1.7.0 --hash=sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec
 pygments==2.21.0 --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9

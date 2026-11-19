@@ -158,7 +158,20 @@ def run():
     if refs.returncode:
         raise SystemExit(refs.stdout + refs.stderr)
     reference = json.loads(refs.stdout.splitlines()[-1])
-    out = dict(schema="ngsolve-fork-type1-validation/1", kind="diagnostic timing; correctness gated only by residual <= 1e-6",
+    # Gate (policy): every true relative residual <= LIMIT. No approved tolerance
+    # exists for agreement with SciPy SuperLU or across thread counts, so those
+    # differences are recorded, not gated, and the report must not claim agreement.
+    ind = reference["independent_solver"]
+    residuals = [r["true_relative_residual"] for rs in samples.values() for r in rs]
+    residuals += [r["true_relative_residual"] for r in reference["analytic"]["rows"]]
+    residuals += [ind["scipy_true_relative_residual"], ind["ngsolve_true_relative_residual"]]
+    residual_pass = all(math.isfinite(v) and v <= LIMIT for v in residuals)
+    gates = dict(
+        residual=dict(limit=LIMIT, max=max(residuals), passed=residual_pass),
+        reference_agreement=dict(status="recorded_not_gated", approved_tolerance=None, agreement_claimed=False,
+                                 rel_diff_ngsolve_vs_scipy=ind["rel_diff_ngsolve_vs_scipy"],
+                                 max_thread_rel_diff_vs_1thread=max(thread_agreement.values())))
+    out = dict(schema="ngsolve-fork-type1-validation/2", kind="diagnostic timing; residual gate only; reference agreement recorded, not gated",
         job=os.environ.get("PBS_JOBID"), queue="t1-single", pbs_allowed_cpus=len(allowed), numa_node=node,
         memory_policy=f"numactl --membind={node}", selected_physical_cores=[dict(socket=s, core=c, cpu=cpu) for (s, c), cpu in selected],
         source=json.loads(Path("validated-wheels.json").read_text())["source"],
@@ -167,10 +180,13 @@ def run():
         timing="total = mesh + assembly + factorization + first solve; residual check excluded; MKL_NUM_THREADS=1",
         run_order=RUN_ORDER, samples=samples, medians_s=med,
         speedup_vs_1={t: {k: med["1"][k]/med[t][k] for k in keys} for t in med},
-        thread_agreement_rel_diff_vs_1thread=thread_agreement, reference=reference, pass_=True)
+        thread_agreement_rel_diff_vs_1thread=thread_agreement, reference=reference, gates=gates,
+        pass_=residual_pass)
     for p in Path(".").glob("x_*.npy"):
         p.unlink()
     Path("result.json").write_text(json.dumps(out, indent=2) + "\n")
+    if not residual_pass:
+        raise SystemExit(f"residual gate failed: max {gates['residual']['max']} > {LIMIT}")
 
 
 if __name__ == "__main__":

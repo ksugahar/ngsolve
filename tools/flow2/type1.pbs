@@ -1,0 +1,16 @@
+#!/bin/bash
+# Type I (x86_64) CPU route in one whole-node t1-single job: build the wheels,
+# then install the SHA-256-verified wheels into a clean venv and check reference
+# agreement and 1/16/48-thread timing. Every step keeps its own run directory.
+#   qsub -q t1-single -l node=1 -v JOB_ROOT=<root> type1.pbs
+#PBS -l walltime=03:00:00
+#PBS -j oe
+#PBS -r n
+set -Eeuo pipefail
+umask 077
+: "${JOB_ROOT:?}"
+here=$JOB_ROOT/source/tools/flow2
+test "$(uname -m)" = x86_64
+CORES=${BUILD_CORES:-32} BUDGET_S=${BUILD_BUDGET_S:-7200} RUN=build-1 bash "$here/build.pbs"
+grep -qx 'phase=complete' "$JOB_ROOT/build-1/terminal.txt"
+RUN=validate-1 BUILD=build-1 bash "$here/validate_cpu.sh"

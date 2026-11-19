@@ -67,10 +67,11 @@ def dynamic_metadata(field: str, settings: dict | None = None):
     if field == "version":
         return utils.get_version(os.getcwd())
     if field == "dependencies":
+        # an empty NGSOLVE_BLAS_REQUIREMENT declares none (site BLAS, e.g. NVPL on Grace)
         return [
             _netgen_requirement(),
             "numpy",
-            _blas_requirement(),
+            *([_blas_requirement()] if _blas_requirement() else []),
             *[r for r in os.environ.get("NGSOLVE_EXTRA_REQUIREMENTS", "").split(";;") if r],
         ]
 

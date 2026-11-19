@@ -1,0 +1,4 @@
+mkl==2026.2.1
+mkl-devel==2026.2.1
+netgen-occt==8.0.1
+netgen-occt-devel==8.0.1

@@ -24,6 +24,9 @@ def preload_cuda_libs():
         libs = [
             ("nvidia.cuda_runtime", "lib/libcudart.so.12"),
             ("nvidia.nvjitlink", "lib/libnvJitLink.so.12"),
+            # _ngscuda and libngscudalib link libnvrtc.so.12; nvrtc loads its builtins by name
+            ("nvidia.cuda_nvrtc", "lib/libnvrtc-builtins.so.12.8"),
+            ("nvidia.cuda_nvrtc", "lib/libnvrtc.so.12"),
         ]
 
     for pkg, rel in libs:

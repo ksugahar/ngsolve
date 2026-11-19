@@ -9,7 +9,7 @@ Flow2 route; its distribution rules are repeated below.
 
 - Type II (Grace + GB200, aarch64): CUDA `sm_100` with cuDSS, built on
   `t2-dev`, validated on a full GB200 on `t2-share`.
-- Type I (x86_64): CPU wheels on `t1-single`, reference agreement and timings
+- Type I (x86_64): CPU wheels on `t1-single`, recorded reference differences and timings
   at 1, 16 and 48 threads.
 
 Flow2 is outside GitHub Actions and has no runner. Wheels are qualification
@@ -81,7 +81,10 @@ Steps
    `type1_bench.py`: the same P2 problem at 1, 16 and 48 threads pinned to
    physical cores of one NUMA node with memory bound to it, an analytic
    manufactured solution (convergence rate reported), SciPy SuperLU on the
-   same system, and agreement across thread counts. Only the true residual
+   same system, and differences across thread counts. The SuperLU and
+   thread differences are recorded under `gates.reference_agreement` but have
+   no approved tolerance, so they are not gated and no agreement is claimed.
+   Only the true residual
    limit 1e-6 gates; timings never gate.
 
 4. Summarize, then recover:

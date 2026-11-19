@@ -40,6 +40,9 @@ step() { echo "=== $1 $(date -Iseconds)"; }
 
 export NGSOLVE_EXTRA_REQUIREMENTS="" NETGEN_BUNDLED_OCC=0   # never inherited from the caller
 export CMAKE_BUILD_PARALLEL_LEVEL=$CORES CMAKE_GENERATOR=Ninja NETGEN_ARCH=${NETGEN_ARCH:-}
+# Netgen's arm64 SIMD header uses the ARMv8.3 complex instructions (FCMLA); the
+# Grace (Neoverse V2, ARMv9) wheels target that baseline in both packages.
+if [ "$ARCH" = aarch64 ]; then export CFLAGS="-march=armv8.4-a" CXXFLAGS="-march=armv8.4-a"; fi
 # the venv is reused by a resumed build (a chained job continues the same build dirs)
 [ -x "$JOB/venv/bin/python" ] || { step venv; "$PYTHON" -m venv "$JOB/venv"; }
 PY=$JOB/venv/bin/python

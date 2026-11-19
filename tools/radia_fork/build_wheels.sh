@@ -82,9 +82,33 @@ if [ -n "${OCC_SOURCE:-}" ]; then
   NG_ARGS+=(-Ccmake.define.BUILD_OCC=OFF -Ccmake.define.OpenCascade_DIR="$OCC_CMAKE")
 fi
 
+# A static OpenCASCADE has no netgen-occt-devel wheel for the platform: skip
+# pypa/build's check, but require every other declared build requirement.
+SKIP=()
+if [ "$NETGEN_BUNDLED_OCC" = 1 ]; then
+  SKIP=(--skip-dependency-check)
+  "$PY" - "$NETGEN/pyproject.toml" "$NGSOLVE/pyproject.toml" <<'EOF'
+import sys, tomllib
+from importlib.metadata import version, PackageNotFoundError
+from packaging.requirements import Requirement
+missing = []
+for f in sys.argv[1:]:
+    for r in map(Requirement, tomllib.load(open(f, "rb"))["build-system"]["requires"]):
+        if r.name == "netgen-occt-devel" or (r.marker and not r.marker.evaluate()):
+            continue
+        try:
+            if not r.specifier.contains(version(r.name), prereleases=True):
+                missing.append(f"{r} (have {version(r.name)})")
+        except PackageNotFoundError:
+            missing.append(str(r))
+if missing:
+    sys.exit(f"missing build requirements: {missing}")
+EOF
+fi
+
 step "netgen wheel"
 if [ -z "${WHEELHOUSE:-}" ] && [ "$NETGEN_BUNDLED_OCC" = 0 ]; then (cd "$NETGEN" && "$PY" tests/utils.py --install-build-requires); fi
-(cd "$NETGEN" && "$PY" -m build --wheel --no-isolation --outdir "$DIST" -Cbuild-dir="$JOB/b-netgen" "${NG_ARGS[@]}" .)
+(cd "$NETGEN" && "$PY" -m build --wheel --no-isolation "${SKIP[@]}" --outdir "$DIST" -Cbuild-dir="$JOB/b-netgen" "${NG_ARGS[@]}" .)
 step "netgen repair"
 "$PY" -m auditwheel repair --exclude 'libTK*' --exclude 'libngcore.so' --exclude 'libnglib.so' -w "$WH" "$DIST"/netgen_mesher-*.whl
 "$PY" -m pip install -q --no-deps "$WH"/netgen_mesher-*.whl
@@ -132,7 +156,7 @@ fi
 export NGSOLVE_EXTRA_REQUIREMENTS
 
 step "ngsolve wheel"
-(cd "$NGSOLVE" && "$PY" -m build --wheel --no-isolation --outdir "$DIST" -Cbuild-dir="$JOB/b-ngsolve" \
+(cd "$NGSOLVE" && "$PY" -m build --wheel --no-isolation "${SKIP[@]}" --outdir "$DIST" -Cbuild-dir="$JOB/b-ngsolve" \
    -Ccmake.define.USE_CCACHE=OFF "${PY_ARGS[@]}" "${BLAS_ARGS[@]}" "${CUDA_ARGS[@]}" .)
 step "ngsolve repair"
 "$PY" -m auditwheel repair --exclude 'libTK*' --exclude 'libngcore.so' --exclude 'libnglib.so' "${EXCLUDE[@]}" -w "$WH" "$DIST"/ngsolve-*.whl

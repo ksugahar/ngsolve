@@ -60,7 +60,7 @@ Steps
    ```sh
    t=$ROOT2/source/tools/flow2
    prev=$(qsub -q t2-dev -l gpu=1 -v JOB_ROOT=$ROOT2,RUN=build-1 "$t/build.pbs")
-   for i in 2 3 4 5 6; do prev=$(qsub -q t2-dev -l gpu=1 -W depend=afterany:$prev -v JOB_ROOT=$ROOT2,RUN=build-1 "$t/build.pbs"); done
+   for i in 2 3 4 5 6 7 8; do prev=$(qsub -q t2-dev -l gpu=1 -W depend=afterany:$prev -v JOB_ROOT=$ROOT2,RUN=build-1 "$t/build.pbs"); done
    qsub -q t2-share -l gpu=1 -W depend=afterany:$prev -v JOB_ROOT=$ROOT2,RUN=validate-1,BUILD=build-1 "$t/validate.pbs"
    ```
 

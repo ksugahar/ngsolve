@@ -26,7 +26,7 @@ Fixed inputs
 | Python | system `python3.12` | system `python3.12` |
 | Build tools | `requirements-build-aarch64.txt`, hash-pinned | `requirements-build-x86_64.txt` |
 | Runtime for checks | `requirements-validate-aarch64.txt` | `requirements-validate-x86_64.txt` |
-| OpenCASCADE | 8.0.1 built static into `netgen-mesher` (no `netgen-occt` wheel exists for aarch64); the wheel declares no `netgen-occt` | `netgen-occt==8.0.1` wheel, as on Windows |
+| OpenCASCADE | 8.0.1 built static by Netgen's own superbuild (`BUILD_OCC=ON`) and linked into `netgen-mesher` (no `netgen-occt` wheel exists for aarch64); the wheel declares no `netgen-occt` | `netgen-occt==8.0.1` wheel, as on Windows |
 | BLAS/LAPACK | site NVPL (`NVPL_LIB_FLOW2`, sequential LP64), linked, neither bundled nor declared | `mkl` wheel (`mkl>=2026,<2027` declared) |
 | CUDA | facility CUDA 12.8, `sm_100`; runtime from the pinned `nvidia-*-cu12` wheels | none |
 | GPU check | one visible GPU, name contains `GB200`, compute capability `10.0` | none |

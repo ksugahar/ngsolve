@@ -10,9 +10,7 @@
 #   WHEELHOUSE, REQUIREMENTS  offline: install every build tool from the hash-pinned
 #                             REQUIREMENTS file out of WHEELHOUSE (no network, no
 #                             per-step pip installs); both or neither
-#   OCC_SOURCE                OpenCASCADE source archive: build it statically into
-#                             <job>/occ (resumable) and link it into netgen-mesher,
-#                             which then declares no netgen-occt requirement
+#   NETGEN_BUILD_OCC          1: Netgen superbuild builds a static OpenCASCADE (BUILD_OCC=ON)
 #   CUDA_ROOT, CUDA_ARCH      add ngscuda (nvcc from CUDA_ROOT, one architecture)
 #   CUDSS_INCLUDE             cuDSS headers (from the pinned wheel); with CUDA only
 #   CUDA_REQUIREMENTS         ";;"-separated runtime pins for the CUDA wheel
@@ -63,26 +61,12 @@ PY_INC=$("$PY" -c "import sysconfig; print(sysconfig.get_path('include'))")
 PY_ARGS=(-Ccmake.define.Python3_EXECUTABLE="$PY" -Ccmake.define.Python3_INCLUDE_DIR="$PY_INC"
   -Ccmake.define.Python3_FIND_UNVERSIONED_NAMES=NEVER)
 NG_ARGS=(-Ccmake.define.USE_GUI=OFF -Ccmake.define.USE_CCACHE=OFF -Ccmake.define.USE_MPI=OFF "${PY_ARGS[@]}")
-if [ -n "${OCC_SOURCE:-}" ]; then
-  # static OpenCASCADE with the module set of Netgen's own BUILD_OCC superbuild
-  step "occ"
-  mkdir -p "$JOB/occ-src"
-  [ -f "$JOB/occ-src/.unpacked" ] || { rm -rf "$JOB/occ-src"/*; "$PY" -m zipfile -e "$OCC_SOURCE" "$JOB/occ-src"; touch "$JOB/occ-src/.unpacked"; }
-  OCC_SRC=$(find "$JOB/occ-src" -mindepth 1 -maxdepth 1 -type d | head -1)
-  cmake -S "$OCC_SRC" -B "$JOB/b-occ" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$JOB/occ" \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_LIBRARY_TYPE:STRING=Static \
-    -DBUILD_MODULE_FoundationClasses:BOOL=ON -DBUILD_MODULE_ModelingData:BOOL=ON \
-    -DBUILD_MODULE_ModelingAlgorithms:BOOL=ON -DBUILD_MODULE_DataExchange:BOOL=ON \
-    -DBUILD_MODULE_Visualization:BOOL=OFF -DBUILD_MODULE_ApplicationFramework:BOOL=OFF \
-    -DBUILD_MODULE_Draw:BOOL=OFF -DBUILD_MODULE_DETools:BOOL=OFF -DUSE_FREETYPE:BOOL=OFF \
-    -DUSE_OPENGL:BOOL=OFF -DUSE_XLIB:BOOL=OFF -DBUILD_DOC_Overview:BOOL=OFF
-  cmake --build "$JOB/b-occ" --parallel "$CORES"
-  cmake --install "$JOB/b-occ" > /dev/null
-  OCC_CMAKE=$(dirname "$(find "$JOB/occ" -name 'OpenCASCADEConfig.cmake' | head -1)")
-  [ -d "$OCC_CMAKE" ] || { echo "static OpenCASCADE has no CMake config" >&2; exit 1; }
-  ! find "$JOB/occ" -name 'libTK*.so*' | grep -q . || { echo "OpenCASCADE built shared libraries" >&2; exit 1; }
+if [ "${NETGEN_BUILD_OCC:-0}" = 1 ]; then
+  # Netgen's own superbuild builds OpenCASCADE static and links it into the wheel;
+  # its archive must already sit in Netgen's download directory (offline nodes)
+  ls "$NETGEN"/external_dependencies/V*.zip > /dev/null
   export NETGEN_BUNDLED_OCC=1
-  NG_ARGS+=(-Ccmake.define.BUILD_OCC=OFF -Ccmake.define.OpenCascade_DIR="$OCC_CMAKE")
+  NG_ARGS+=(-Ccmake.define.BUILD_OCC=ON)
 fi
 
 # A static OpenCASCADE has no netgen-occt-devel wheel for the platform: skip

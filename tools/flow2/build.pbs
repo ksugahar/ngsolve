@@ -50,14 +50,14 @@ if [ ! -d src ]; then   # independent tree per run, kept across links
   git -C "$ng" submodule -q init   # no network: point pybind11 at the staged clone
   git -C "$ng" config submodule.external_dependencies/pybind11.url "$JOB_ROOT/source/external_dependencies/netgen/external_dependencies/pybind11"
   git -C "$ng" -c protocol.file.allow=always submodule -q update
-  cp "$JOB_ROOT/source/external_dependencies/netgen/external_dependencies/v1.3.1.zip" "$ng/external_dependencies/"
+  cp "$JOB_ROOT"/source/external_dependencies/netgen/external_dependencies/*.zip "$ng/external_dependencies/"
 fi
 diff <(git -C src rev-parse HEAD; git -C src/external_dependencies/netgen rev-parse HEAD) "$JOB_ROOT/source-heads.txt"
 phase=build
 args=(WHEELHOUSE="$JOB_ROOT/wheelhouse-build" REQUIREMENTS="$JOB_ROOT/source/tools/flow2/requirements-build-$machine.txt")
 if [ "$machine" = aarch64 ]; then
   inc="$run/job/venv/lib/python3.12/site-packages/nvidia/cu12/include"
-  args+=(OCC_SOURCE="$JOB_ROOT/occ/V8_0_1.zip" NVPL_LIB="$nvpl" CUDA_ROOT="$cuda" CUDA_ARCH="$arch" CUDSS_INCLUDE="$inc"
+  args+=(NETGEN_BUILD_OCC=1 NVPL_LIB="$nvpl" CUDA_ROOT="$cuda" CUDA_ARCH="$arch" CUDSS_INCLUDE="$inc"
     CUDA_REQUIREMENTS="nvidia-cuda-runtime-cu12==12.8.57;;nvidia-cuda-nvrtc-cu12==12.8.61;;nvidia-cudss-cu12==0.8.0.10;;nvidia-cublas-cu12==12.8.3.14;;nvidia-nvjitlink-cu12==12.8.61"
     LD_LIBRARY_PATH="$nvpl:$cuda/lib64")
   "$cuda/bin/nvcc" --version > nvcc.txt

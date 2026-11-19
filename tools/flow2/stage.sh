@@ -37,9 +37,8 @@ fetch() { # url md5 dest
   curl -fsSL -o "$3" "$1"; echo "$2  $3" | md5sum -c --quiet -; }
 fetch https://github.com/madler/zlib/archive/refs/tags/v1.3.1.zip 127b8a71a3fb8bebe89df1080f15fdf6 "$ng/external_dependencies/v1.3.1.zip"
 if [ "$machine" = aarch64 ]; then
-  # the OpenCASCADE archive and MD5 of Netgen's own BUILD_OCC superbuild
-  mkdir "$root/occ"
-  fetch https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V8_0_1.zip 5b0b171d7028cf73bd9369997091347a "$root/occ/V8_0_1.zip"
+  # the OpenCASCADE archive and MD5 of Netgen's BUILD_OCC superbuild, which builds it
+  fetch https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V8_0_1.zip 5b0b171d7028cf73bd9369997091347a "$ng/external_dependencies/V8_0_1.zip"
 fi
 platform="--only-binary=:all: --implementation cp --python-version 3.12 --abi cp312"
 for tag in manylinux_2_34 manylinux_2_28 manylinux_2_27 manylinux_2_24 manylinux_2_17 manylinux2014; do
@@ -60,7 +59,7 @@ json.dump({"owner": owner, "request": request, "source_sha": sha, "netgen_sha": 
            "machine": machine, "scope": scope},
           open(f"{root}/owner.json", "w"), indent=2)
 PY
-(cd "$root" && { find wheelhouse-build wheelhouse-validate -type f; [ ! -d occ ] || find occ -type f;
+(cd "$root" && { find wheelhouse-build wheelhouse-validate -type f; [ "$machine" != aarch64 ] || echo source/external_dependencies/netgen/external_dependencies/V8_0_1.zip;
   echo source/external_dependencies/netgen/external_dependencies/v1.3.1.zip; echo source-heads.txt; echo owner.json; } \
   | sort | xargs sha256sum > inputs.sha256)
 n=$(find "$root/wheelhouse-build" "$root/wheelhouse-validate" -type f | wc -l)

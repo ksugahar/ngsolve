@@ -47,9 +47,11 @@ python tools/radia_fork/replay.py check \
     --ngsolve <repo> <old base> <old tip> <new base> <new tip>
 ```
 
-`check` does not trust how the replay was made. For every commit it
-compares order, parent chain, message, author and stable patch-id (the
-Netgen gitlink excluded), and requires each NGSolve gitlink to be the image
+`check` does not trust how the replay was made. Both ranges must be
+nonempty linear chains from their stated bases. For every commit it
+compares order, parent chain, message and author, rebuilds the expected
+tree by applying the original patch exactly (no merge, whitespace kept,
+Netgen gitlink excluded) onto the replayed parent, and requires each NGSolve gitlink to be the image
 of the original one and reachable from the new Netgen tip. A second person
 or agent runs it on their own clone before review.
 

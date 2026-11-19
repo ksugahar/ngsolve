@@ -15,15 +15,19 @@ image of its original gitlink under --map (the netgen step's output);
 unmapped gitlinks are kept. Pass --map for each Netgen commit that an
 NGSolve commit in the series references.
 
-`check` is independent of how the replay was made. Per commit it requires:
-same count and order, linear parents from NEW_BASE, identical message
-(trailing newlines ignored) and author, identical patch apart from the Netgen gitlink (stable patch-id),
-and for NGSolve a gitlink equal to the Netgen image of the original one,
-reachable from the new Netgen tip. It exits non-zero on the first failure.
+`check` is independent of how the replay was made. Both ranges must be
+nonempty linear chains starting at their stated bases. Per commit it
+requires: same count and order, identical message (trailing newlines
+ignored) and author, and a tree equal to the original patch (Netgen
+gitlink excluded) applied exactly, without merging, onto the replayed
+parent; for NGSolve the gitlink must equal the Netgen image of the
+original one and be reachable from the new Netgen tip. It exits non-zero
+on the first failure.
 
 The committer is the caller's git identity (set user.name/user.email).
 
-Exit codes: 0 success, 1 check failure, 2 conflict or usage error.
+Exit codes: 0 success, 1 check failure or invalid range, 2 conflict or
+git/usage error.
 """
 import argparse
 import json
@@ -45,12 +49,40 @@ def git(repo, *args, env=None, stdin=None):
 
 
 def series(repo, base, tip):
-    out = git(repo, "rev-list", "--reverse", "--topo-order", f"{base}..{tip}")
+    """Nonempty linear chain base -> ... -> tip; anything else is refused."""
+    base_c = git(repo, "rev-parse", f"{base}^{{commit}}")
+    tip_c = git(repo, "rev-parse", f"{tip}^{{commit}}")
+    out = git(repo, "rev-list", "--reverse", "--topo-order", f"{base_c}..{tip_c}")
     commits = out.split() if out else []
+    if not commits:
+        raise AssertionError(f"{repo}: empty range {base}..{tip}")
+    parent = base_c
     for c in commits:
-        if len(git(repo, "show", "-s", "--format=%P", c).split()) != 1:
-            raise SystemExit(f"{c} is a merge; replay only linear series")
+        if git(repo, "show", "-s", "--format=%P", c) != parent:
+            raise AssertionError(f"{repo}: {c} is not a single-parent child of {parent}; "
+                                 f"{base}..{tip} is not a linear series from {base}")
+        parent = c
     return commits
+
+
+def expected_tree(repo, commit, new_parent, link):
+    """Tree of `commit`'s exact patch applied onto new_parent, gitlink set to link."""
+    fd, idx = tempfile.mkstemp(prefix="radia-check-", suffix=".idx")
+    os.close(fd)
+    env = {"GIT_INDEX_FILE": idx}
+    try:
+        git(repo, "read-tree", new_parent, env=env)
+        body = patch(repo, commit)
+        if body:
+            r = subprocess.run(["git", "-c", "safe.directory=*", "-C", repo, "apply", "--cached"],
+                               input=body, capture_output=True, env={**os.environ, **env})
+            if r.returncode:
+                return None
+        if link:
+            git(repo, "update-index", "--cacheinfo", f"160000,{link},{SUB}", env=env)
+        return git(repo, "write-tree", env=env)
+    finally:
+        os.unlink(idx)
 
 
 def gitlink(repo, commit):
@@ -63,15 +95,6 @@ def patch(repo, commit):
         ["git", "-c", "safe.directory=*", "-C", repo, "diff", "--binary",
          f"{commit}~1", commit, "--", ".", f":(exclude){SUB}"],
         capture_output=True, check=True).stdout
-
-
-def patch_id(repo, commit):
-    body = patch(repo, commit)
-    if not body:
-        return ""
-    r = subprocess.run(["git", "-C", repo, "patch-id", "--stable"], input=body,
-                       capture_output=True, check=True)
-    return r.stdout.decode().split()[0] if r.stdout else ""
 
 
 def author_env(repo, c):
@@ -125,9 +148,9 @@ def check(repo, old_base, old_tip, new_base, new_tip, netgen=None):
         checks = {
             "parent": git(repo, "show", "-s", "--format=%P", b) == parent,
             "message_author": meta(repo, a) == meta(repo, b),
-            "patch": patch_id(repo, a) == patch_id(repo, b),
         }
         row = {"old": a, "new": b}
+        want = None
         if netgen is not None:
             ng_repo, ng_map, ng_tip = netgen
             la, lb = gitlink(repo, a), gitlink(repo, b)
@@ -135,6 +158,7 @@ def check(repo, old_base, old_tip, new_base, new_tip, netgen=None):
             checks["gitlink"] = lb == want and subprocess.run(
                 ["git", "-C", ng_repo, "merge-base", "--is-ancestor", lb, ng_tip]).returncode == 0
             row.update(gitlink_old=la, gitlink_new=lb)
+        checks["tree"] = expected_tree(repo, a, parent, want) == git(repo, "rev-parse", f"{b}^{{tree}}")
         bad = [k for k, ok in checks.items() if not ok]
         if bad:
             raise AssertionError(f"{a} -> {b}: {', '.join(bad)} differ")

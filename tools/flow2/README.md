@@ -105,25 +105,77 @@ Steps
 Distribution to Flow2 users
 ---------------------------
 
-Flow2 users install wheels from the lab's shared distribution folder, never
-from a job root or a build tree. The folder location is lab configuration and
-is not recorded in this repository. The rules are those of radia-optuna.
+The lab distribution is the primary route for Flow2 users, for example
+students running their own jobs under their own accounts. Users install from
+the lab's shared distribution folder, never from a job root or a build tree.
+The folder location is lab configuration and is not recorded in this
+repository. Attaching the same verified files to a GitHub release is optional.
 
-1. Eligibility. Only a commit pair that is merged, with Type II and Type I
-   both complete at that pair: every PBS job ID recorded, every run complete
-   with exit code 0, both `result.json` summaries passing, and the wheels,
-   logs, result JSON and artifacts recovered to private evidence storage with
-   SHA-256 matching at both ends. Placing files needs the release owner's
-   explicit approval.
-2. Content. One folder per package pair and source commit, holding only the
-   exact wheels each validation job installed (`validated-wheels.json`),
-   `SHA256SUMS`, the matching `requirements-validate-*.txt`, PBS examples for
-   user jobs (queue, resources, job-local venv, `pip install --no-index
-   --require-hashes` then the wheels, and on aarch64 the NVPL library path),
-   and a README with the source SHAs, PBS job IDs, Python 3.12 and each
-   wheel's profile. Only the latest verified release is kept. Wheels are never
-   rebuilt for distribution.
-3. Acceptance. From a separate, non-administrator account, run
-   `sha256sum -c SHA256SUMS`, install into a fresh venv on each node type and
-   run each PBS example to completion before announcing the release.
-4. Distribution files are not committed to a source tree.
+Items 1 to 5 follow the general Flow2 reference of radia-optuna. "Fork
+settings" at the end lists what is specific to the Netgen and NGSolve wheels.
+
+1. Eligibility. Only a release whose exact source commit is merged is
+   distributed. Every qualification lane must be complete at that exact
+   commit. Evidence from an earlier commit, including a pre-merge candidate,
+   does not qualify a later merged commit, even with an equal tree; the lanes
+   run again at the merged commit. Completion means:
+   - every PBS job ID is recorded, and every run is `complete` with exit code 0;
+   - every `result.json` summary passes;
+   - the wheels, logs, result JSON and artifacts are recovered to private
+     evidence storage, with SHA-256 matching at both ends.
+   A missing or mismatched hash, a failed gate or an unrecorded job means no
+   distribution. Placing files also needs the release owner's explicit approval.
+2. Content. One folder per package pair and source commit, holding only:
+   - each project wheel, as the exact file its validation job installed
+     (`validated-wheels.json`); wheels are never rebuilt for distribution;
+   - `wheelhouse/`: the hash-pinned runtime dependency wheels for every
+     distributed architecture. These are the files the qualification jobs
+     installed from their staged wheelhouses, checked against the pinned
+     requirement files;
+   - the pinned runtime requirement file of each architecture;
+   - PBS examples for user jobs;
+   - a short README with the source SHAs, PBS job IDs, Python version and the
+     profile of each wheel;
+   - `SHA256SUMS`, covering every other file in the folder (payload files,
+     `wheelhouse/` included) and not itself.
+   The distribution folder keeps only the latest verified release. A
+   superseded release is removed after its replacement is verified.
+3. Installation. A PBS example creates a job-local venv and installs offline
+   from the folder only (`<machine>` is `aarch64` or `x86_64`):
+
+   ```sh
+   (cd "$DIST" && sha256sum -c SHA256SUMS)
+   python3.12 -m venv venv
+   venv/bin/python -m pip install --no-index --require-hashes      --find-links "$DIST/wheelhouse" -r "$DIST/requirements-validate-<machine>.txt"
+   venv/bin/python -m pip install --no-index --no-deps      "$DIST/<netgen-mesher wheel for this node>" "$DIST/<ngsolve wheel for this node>"
+   ```
+
+   The runtime dependencies resolve first from the hash-pinned wheelhouse.
+   The verified project wheels are then installed by their exact paths with
+   `--no-deps`; their hashes were checked by `SHA256SUMS`.
+4. Acceptance before announcement. From a separate user account, without
+   Administrator paths, fetch the folder and run each PBS example to
+   completion on each node type: manifest check, fresh venv, installation,
+   and one run of the package. Record the job IDs and outputs with the release
+   evidence. Until then the release is not announced.
+5. Version control. Distribution files are not committed to a source tree.
+   When the folder sits inside a checkout, it must be a path that Git ignores.
+
+Fork settings (specific to the Netgen and NGSolve wheels):
+
+- Lanes: Type II (aarch64, CUDA profile): one build run chained over `t2-dev`
+  links, GB200 validation on `t2-share`. Type I (x86_64, CPU profile): one
+  `t1-single` job (`-l node=1`) that builds, validates and times 1/16/48
+  threads. Distributed wheels: the `netgen-mesher` and `ngsolve` pair of each
+  lane, as recorded in that lane's `validated-wheels.json`.
+- Runtime: CPython 3.12. `requirements-validate-aarch64.txt` and
+  `requirements-validate-x86_64.txt` pin the runtime with one hash per
+  platform wheel. `wheelhouse/` holds the union of the two staged
+  `wheelhouse-validate` directories. The aarch64 PBS example also puts the
+  site NVPL library directory on `LD_LIBRARY_PATH`; NVPL is neither bundled
+  nor declared.
+- Qualification: the gates in this README. The residual gate decides Type I;
+  differences from SciPy SuperLU and across thread counts are reported as
+  measured values, without an agreement claim, until a tolerance is approved.
+  Timings are diagnostic and never gate.
+- PyPI: Linux wheels are never uploaded.

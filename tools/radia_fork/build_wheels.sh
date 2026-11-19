@@ -93,7 +93,9 @@ step "netgen repair"
 # would fetch SuiteSparse at build time (compute nodes are offline), and it resets
 # LAPACK_LIBRARIES. Linux wheels therefore carry no UMFPACK; requesting it raises.
 NG_CMAKE=$("$PY" -c "import netgen, os; print(os.path.join(os.path.dirname(netgen.__file__), 'cmake'))")
-DIRECT=(-Ccmake.define.USE_SUPERBUILD=OFF -Ccmake.define.Netgen_DIR="$NG_CMAKE" -Ccmake.define.USE_UMFPACK=OFF)
+# stubs need an installed ngsolve, which a direct build has not yet (Windows builds none either)
+DIRECT=(-Ccmake.define.USE_SUPERBUILD=OFF -Ccmake.define.Netgen_DIR="$NG_CMAKE" -Ccmake.define.USE_UMFPACK=OFF
+  -Ccmake.define.BUILD_STUB_FILES=OFF)
 case "$ARCH" in
   x86_64)
     [ -n "${WHEELHOUSE:-}" ] || pipi "mkl==$MKL_VERSION" "mkl-devel==$MKL_VERSION"

@@ -1,0 +1,84 @@
+#!/bin/bash
+# Build the netgen-mesher and ngsolve wheels from the staged exact sources with
+# tools/radia_fork/build_wheels.sh, offline, from the hash-pinned wheelhouse.
+# Type II (aarch64): CUDA sm_100 + cuDSS headers, static OpenCASCADE, site NVPL.
+# One run directory may take several chained t2-dev jobs: each link resumes the
+# same build trees until its deadline and the run seals when the wheels exist.
+#   qsub -q t2-dev -l gpu=1 -v JOB_ROOT=<root>,RUN=build-1 build.pbs   (repeat with depend=afterany)
+# Type I (x86_64): type1.pbs runs this script as a step with CORES set.
+#PBS -l walltime=01:00:00
+#PBS -j oe
+#PBS -r n
+set -Eeuo pipefail
+umask 077
+: "${JOB_ROOT:?}" "${RUN:?}"
+start=$(date +%s)
+budget=${BUDGET_S:-3300}             # seconds of build per link (t2-dev allows one hour)
+cores=${CORES:-4}
+cuda=${CUDA_HOME_FLOW2:-/home/center/opt/aarch64/cores/cuda/12.8}
+nvpl=${NVPL_LIB_FLOW2:-/home/center/opt/aarch64/cores/nvhpc/26.5/Linux_aarch64/26.5/math_libs/nvpl/lib}
+arch=${CUDA_ARCH_FLOW2:-100}
+run=$JOB_ROOT/$RUN
+mkdir -p "$run"
+cd "$run"
+[ ! -e sealed.txt ] || { echo "$(date -Iseconds) ${PBS_JOBID:-} already sealed" >> links.txt; exit 0; }
+link=$(( $( [ -f links.txt ] && wc -l < links.txt || echo 0) + 1 ))
+echo "$(date -Iseconds) ${PBS_JOBID:-} link $link" >> links.txt
+exec >>run.log 2>&1
+echo "=== link $link ${PBS_JOBID:-} $(date -Iseconds)"
+phase=allocation
+trap 'rc=$?; printf "phase=%s\nexit_code=%s\nlink=%s\n" "$phase" "$rc" "$link" > terminal.txt' EXIT
+machine=$(python3.12 -c 'import json,sys; print(json.load(open(sys.argv[1]))["machine"])' "$JOB_ROOT/owner.json")
+test "$(uname -m)" = "$machine"
+python3.12 -c 'import json,os,socket,sys; json.dump({"run":sys.argv[1],"link":int(sys.argv[2]),"pbs_jobid":os.environ.get("PBS_JOBID"),"node":socket.gethostname()},open(f"job-{sys.argv[2]}.json","w"),indent=2)' "$RUN" "$link"
+(cd "$JOB_ROOT" && sha256sum --quiet -c inputs.sha256)
+python3.12 - "$JOB_ROOT/owner.json" <<'PY'
+import datetime, json, sys
+deadline = datetime.datetime.fromisoformat(json.load(open(sys.argv[1]))["deadline_utc"])
+assert datetime.datetime.now(datetime.timezone.utc) < deadline, "past the owner.json deadline"
+PY
+cpus=$(python3.12 -c 'import os,sys; a=sorted(os.sched_getaffinity(0)); n=int(sys.argv[1]); assert len(a)>=n; print(",".join(map(str,a[:n])))' "$cores")
+taskset -pc "$cpus" $$ > affinity.txt
+export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 SOURCE_DATE_EPOCH=$(git -C "$JOB_ROOT/source" log -1 --format=%ct)
+unset PYTHONPATH
+phase=checkout
+if [ ! -d src ]; then   # independent tree per run, kept across links
+  git clone -q --no-hardlinks "$JOB_ROOT/source" src
+  git clone -q --no-hardlinks "$JOB_ROOT/source/external_dependencies/netgen" src.netgen
+  rmdir src/external_dependencies/netgen; mv src.netgen src/external_dependencies/netgen
+  ng=src/external_dependencies/netgen
+  git -C "$ng" submodule -q init   # no network: point pybind11 at the staged clone
+  git -C "$ng" config submodule.external_dependencies/pybind11.url "$JOB_ROOT/source/external_dependencies/netgen/external_dependencies/pybind11"
+  git -C "$ng" -c protocol.file.allow=always submodule -q update
+  cp "$JOB_ROOT/source/external_dependencies/netgen/external_dependencies/v1.3.1.zip" "$ng/external_dependencies/"
+fi
+diff <(git -C src rev-parse HEAD; git -C src/external_dependencies/netgen rev-parse HEAD) "$JOB_ROOT/source-heads.txt"
+phase=build
+args=(WHEELHOUSE="$JOB_ROOT/wheelhouse-build" REQUIREMENTS="$JOB_ROOT/source/tools/flow2/requirements-build-$machine.txt")
+if [ "$machine" = aarch64 ]; then
+  inc="$run/job/venv/lib/python3.12/site-packages/nvidia/cu12/include"
+  args+=(OCC_SOURCE="$JOB_ROOT/occ/V8_0_1.zip" NVPL_LIB="$nvpl" CUDA_ROOT="$cuda" CUDA_ARCH="$arch" CUDSS_INCLUDE="$inc"
+    CUDA_REQUIREMENTS="nvidia-cuda-runtime-cu12==12.8.57;;nvidia-cuda-nvrtc-cu12==12.8.61;;nvidia-cudss-cu12==0.8.0.10;;nvidia-cublas-cu12==12.8.3.14"
+    LD_LIBRARY_PATH="$nvpl:$cuda/lib64")
+  "$cuda/bin/nvcc" --version > nvcc.txt
+else
+  args+=(LD_LIBRARY_PATH="$run/job/venv/lib")
+fi
+g++ -dumpfullversion > cxx.txt
+rm -rf out/wheelhouse
+left=$(( budget - ($(date +%s) - start) ))
+[ "$left" -gt 120 ] || { echo "no budget left in this link"; exit 0; }
+set +e
+env "${args[@]}" timeout --signal=TERM --kill-after=60 "$left" \
+  bash src/tools/radia_fork/build_wheels.sh src/external_dependencies/netgen src job out python3.12 "$cores"
+rc=$?
+set -e
+echo "link $link build rc=$rc after $(( $(date +%s) - start )) s"
+if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then phase=continue; exit 0; fi
+[ "$rc" -eq 0 ]
+phase=seal
+(cd out/wheelhouse && sha256sum ./*.whl) > wheel.sha256
+test "$(wc -l < wheel.sha256)" -eq 2
+cp out/receipt.json receipt.json
+date -Iseconds > sealed.txt
+phase=complete

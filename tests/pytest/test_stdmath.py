@@ -231,3 +231,15 @@ def test_bspline2d_diff(unit_mesh_2d):
     for var in [x, y]:
         with pytest.raises(Exception, match="does not provide a derivative"):
             f.Diff(var)
+
+def test_bspline_full_clamped_knots():
+    from ngsolve import BSpline
+
+    # These Bernstein coefficients represent 1 + 3*x on the unit interval.
+    spline = BSpline(4, [0.] * 4 + [1.] * 4, [1., 2., 3., 4.])
+    derivative = spline.Differentiate()
+    integral = spline.Integrate()
+    for x in (0., .125, .5, .875, 1.):
+        assert abs(spline(x) - (1. + 3. * x)) < 1e-12
+        assert abs(derivative(x) - 3.) < 1e-12
+        assert abs(integral(x) - (x + 1.5 * x**2)) < 1e-12

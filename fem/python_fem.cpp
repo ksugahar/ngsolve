@@ -1819,17 +1819,23 @@ vals : list
             PyCheckInt (order, 1, 1000, "order");
             if (py::len(knots) == 0)
               throw py::value_error ("knots must not be empty");
-            if (py::len(vals) + 1 < py::len(knots) || py::len(vals) > py::len(knots))
-              throw py::value_error ("len(vals) must be len(knots) or len(knots)-1");
-            {
-              auto ck = makeCArray<double> (knots);
-              for (size_t i = 1; i < ck.Size(); i++)
-                if (ck[i] < ck[i-1])
-                  throw py::value_error ("knots must be sorted");
-            }
-            return make_shared<BSpline> (order,
-                                         makeCArray<double> (knots),
-                                         makeCArray<double> (vals));
+            auto ck = makeCArray<double> (knots);
+            auto cv = makeCArray<double> (vals);
+            for (size_t i = 1; i < ck.Size(); i++)
+              if (ck[i] < ck[i-1])
+                throw py::value_error ("knots must be sorted");
+            const size_t k = order;
+            const bool clamped = ck.Size() >= 2*k && cv.Size() == ck.Size()-k
+              && ck[k-1] == ck[0] && ck[ck.Size()-k] == ck.Last()
+              && ck[0] < ck.Last();
+            if (!clamped && (cv.Size() + 1 < ck.Size() || cv.Size() > ck.Size()))
+              throw py::value_error ("invalid coefficient count for the supplied knots and order");
+            // The full clamped representation omits the trailing coefficients
+            // needed by the native spline's extended knot storage.
+            if (clamped)
+              while (cv.Size() + 1 < ck.Size())
+                cv.Append(0.);
+            return make_shared<BSpline> (order, std::move(ck), std::move(cv));
           }), py::arg("order"), py::arg("knots"), py::arg("vals"),
         "B-Spline of a certain order, provide knot and value vectors")
     .def("__str__", &ToString<BSpline>)

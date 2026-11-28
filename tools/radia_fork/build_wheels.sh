@@ -112,7 +112,12 @@ case "$ARCH" in
     [ -n "${WHEELHOUSE:-}" ] || pipi "mkl==$MKL_VERSION" "mkl-devel==$MKL_VERSION"
     MKL_VERSION=$("$PY" -c "from importlib.metadata import version; print(version('mkl'))")
     MKL_MAJOR=${MKL_VERSION%%.*}; export NGSOLVE_BLAS_REQUIREMENT="mkl>=$MKL_MAJOR,<$((MKL_MAJOR + 1))"
-    BLAS_ARGS=("${DIRECT[@]}" -Ccmake.define.USE_MKL=ON -Ccmake.define.MKL_ROOT="$JOB/venv")
+    # the direct build has no superbuild to hand MKL over as LAPACK: name the mkl
+    # wheel's single dynamic library, or CMake picks whatever system BLAS it finds
+    MKL_RT=$(ls "$JOB"/venv/lib/libmkl_rt.so.* | head -1)
+    [ -f "$MKL_RT" ] || { echo "no libmkl_rt in $JOB/venv/lib" >&2; exit 1; }
+    BLAS_ARGS=("${DIRECT[@]}" -Ccmake.define.USE_MKL=ON -Ccmake.define.MKL_ROOT="$JOB/venv"
+      -Ccmake.define.LAPACK_LIBRARIES="$MKL_RT")
     EXCLUDE=(--exclude 'libmkl_*' --exclude 'libiomp5.so') ;;
   aarch64)
     # NVPL has no PyPI wheel: the site NVPL (NVPL_LIB) is linked, not bundled and not
@@ -145,6 +150,10 @@ export NGSOLVE_EXTRA_REQUIREMENTS
 step "ngsolve wheel"
 (cd "$NGSOLVE" && "$PY" -m build --wheel --no-isolation "${SKIP[@]}" --outdir "$DIST" -Cbuild-dir="$JOB/b-ngsolve" \
    -Ccmake.define.USE_CCACHE=OFF "${PY_ARGS[@]}" "${BLAS_ARGS[@]}" "${CUDA_ARGS[@]}" .)
+step "ngsolve linkage"
+# the libraries must come from the wheels, never from the build host
+SITE=$(find "$JOB/b-ngsolve" -name 'CMakeCache.txt' -exec grep -hE '^(BLAS|LAPACK)_[A-Za-z_]*LIBRAR[A-Z]*:' {} + | grep -E '/usr/lib|/lib64/' || true)
+[ -z "$SITE" ] || { echo "ngsolve links a host BLAS/LAPACK: $SITE" >&2; exit 1; }
 step "ngsolve repair"
 "$PY" -m auditwheel repair --exclude 'libTK*' --exclude 'libngcore.so' --exclude 'libnglib.so' "${EXCLUDE[@]}" -w "$WH" "$DIST"/ngsolve_radia-*.whl
 

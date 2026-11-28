@@ -97,8 +97,8 @@ step "netgen wheel"
 if [ -z "${WHEELHOUSE:-}" ] && [ "$NETGEN_BUNDLED_OCC" = 0 ]; then (cd "$NETGEN" && "$PY" tests/utils.py --install-build-requires); fi
 (cd "$NETGEN" && "$PY" -m build --wheel --no-isolation "${SKIP[@]}" --outdir "$DIST" -Cbuild-dir="$JOB/b-netgen" "${NG_ARGS[@]}" .)
 step "netgen repair"
-"$PY" -m auditwheel repair --exclude 'libTK*' --exclude 'libngcore.so' --exclude 'libnglib.so' -w "$WH" "$DIST"/netgen_mesher-*.whl
-"$PY" -m pip install -q --no-deps "$WH"/netgen_mesher-*.whl
+"$PY" -m auditwheel repair --exclude 'libTK*' --exclude 'libngcore.so' --exclude 'libnglib.so' -w "$WH" "$DIST"/netgen_mesher_radia-*.whl
+"$PY" -m pip install -q --no-deps "$WH"/netgen_mesher_radia-*.whl
 
 # direct ngsolve builds against the installed netgen-mesher: the ngsolve superbuild
 # would fetch SuiteSparse at build time (compute nodes are offline), and it resets
@@ -146,7 +146,7 @@ step "ngsolve wheel"
 (cd "$NGSOLVE" && "$PY" -m build --wheel --no-isolation "${SKIP[@]}" --outdir "$DIST" -Cbuild-dir="$JOB/b-ngsolve" \
    -Ccmake.define.USE_CCACHE=OFF "${PY_ARGS[@]}" "${BLAS_ARGS[@]}" "${CUDA_ARGS[@]}" .)
 step "ngsolve repair"
-"$PY" -m auditwheel repair --exclude 'libTK*' --exclude 'libngcore.so' --exclude 'libnglib.so' "${EXCLUDE[@]}" -w "$WH" "$DIST"/ngsolve-*.whl
+"$PY" -m auditwheel repair --exclude 'libTK*' --exclude 'libngcore.so' --exclude 'libnglib.so' "${EXCLUDE[@]}" -w "$WH" "$DIST"/ngsolve_radia-*.whl
 
 step "contents"
 "$PY" - "$WH" "$NETGEN_BUNDLED_OCC" <<'EOF'
@@ -160,7 +160,7 @@ for w in sorted(wh.glob("*.whl")):
         sys.exit(f"{w.name} bundles {bad}")
     meta = next(n for n in names if n.endswith(".dist-info/METADATA"))
     occ = [l for l in zipfile.ZipFile(w).read(meta).decode().splitlines() if l.startswith("Requires-Dist: netgen-occt")]
-    if w.name.startswith("netgen_mesher") and bool(occ) == bundled:
+    if w.name.startswith("netgen_mesher_radia") and bool(occ) == bundled:
         sys.exit(f"{w.name}: netgen-occt requirement {occ} contradicts NETGEN_BUNDLED_OCC={int(bundled)}")
 EOF
 

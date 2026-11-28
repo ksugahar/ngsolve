@@ -72,10 +72,10 @@ try {
   Step "netgen requires" { & $py tests\utils.py --install-build-requires }
   Step "netgen wheel" { & $py -m build --wheel --no-isolation --outdir $Dist "-Cbuild-dir=$Job/b-netgen" "-Ccmake.define.USE_GUI=OFF" "-Ccmake.define.USE_CCACHE=OFF" . }
 } finally { Pop-Location }
-$ngWheel = @(Get-ChildItem "$Dist\netgen_mesher-*.whl")
+$ngWheel = @(Get-ChildItem "$Dist\netgen_mesher_radia-*.whl")
 if ($ngWheel.Count -ne 1) { throw "expected one netgen wheel in $Dist, found $($ngWheel.Count)" }
 Step "netgen repair" { & $py -m delvewheel repair --exclude "TK*.dll" --exclude "nglib.dll" --exclude "ngcore.dll" -w $Wh $ngWheel[0].FullName }
-Step "netgen install" { & $py -m pip install --no-deps (Get-ChildItem "$Wh\netgen_mesher-*.whl").FullName }
+Step "netgen install" { & $py -m pip install --no-deps (Get-ChildItem "$Wh\netgen_mesher_radia-*.whl").FullName }
 
 # ngsolve: MKL single dynamic library, loaded from the mkl wheel at import
 $mklMajor = [int]$MklVersion.Split(".")[0]

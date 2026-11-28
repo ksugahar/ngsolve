@@ -117,7 +117,7 @@ def main():
     parser.add_argument(
         "--package",
         type=str,
-        default="ngsolve",
+        default="ngsolve-radia",
         help="Package name to check on pypi",
     )
 

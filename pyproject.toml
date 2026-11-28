@@ -7,7 +7,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "ngsolve"
+name = "ngsolve-radia"
 # dependencies is dynamic: netgen-mesher must be pinned to the *exact* version
 # ngsolve was built/linked against (ABI compatibility), which is only known at
 # build time -- see tests/ngsolve_metadata.py.

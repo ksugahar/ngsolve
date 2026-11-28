@@ -426,12 +426,12 @@ endif()
 
 if(NETGEN_USE_PYTHON AND NOT SKBUILD)
   # install egg file to let python/pip know that Netgen ist installed
-  file( WRITE "ngsolve-py3.egg-info"
+  file( WRITE "ngsolve_radia-py3.egg-info"
 "Metadata-Version: 2.1
-Name: ngsolve
+Name: ngsolve-radia
 Version: ${NGSOLVE_VERSION_MAJOR}.${NGSOLVE_VERSION_MINOR}.${NGSOLVE_VERSION_PATCH}.post${NGSOLVE_VERSION_TWEAK}
 ")
-  install(FILES ngsolve-py3.egg-info DESTINATION ${NGSOLVE_INSTALL_DIR_PYTHON} COMPONENT ngsolve)
+  install(FILES ngsolve_radia-py3.egg-info DESTINATION ${NGSOLVE_INSTALL_DIR_PYTHON} COMPONENT ngsolve)
 endif()
 
 #######################################################################

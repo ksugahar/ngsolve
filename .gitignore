@@ -19,7 +19,7 @@ ng*.trace
 dist
 _skbuild
 .vscode
-ngsolve-py3.egg-info
+ngsolve_radia-py3.egg-info
 
 build
 em_build

@@ -53,10 +53,10 @@ def _netgen_requirement() -> str:
     try:
         import netgen.config
 
-        return f"netgen-mesher=={netgen.config.NETGEN_VERSION_PYTHON}"
+        return f"netgen-mesher-radia=={netgen.config.NETGEN_VERSION_PYTHON}"
     except Exception:
         # netgen not importable (e.g. plain sdist build): leave it unpinned.
-        return "netgen-mesher"
+        return "netgen-mesher-radia"
 
 
 def dynamic_metadata(field: str, settings: dict | None = None):

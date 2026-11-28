@@ -22,7 +22,7 @@ do
     echo $PYDIR
     $PYDIR/pip install -U pip requests packaging
     # skip this version if it is already published on PyPI
-    $PYDIR/python3 ./tests/utils.py --check-pip --package ngsolve || continue
+    $PYDIR/python3 ./tests/utils.py --check-pip --package ngsolve-radia || continue
 
     $PYDIR/pip install -U build twine ninja cmake "scikit-build-core>=0.10" pybind11-stubgen
     $PYDIR/pip install -U netgen-occt==8.0.1 netgen-occt-devel==8.0.1 netgen-mesher-radia==$NETGEN_VERSION "ngsolve-openblas==$OPENBLAS_VERSION_PIP"

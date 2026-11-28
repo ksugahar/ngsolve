@@ -38,7 +38,7 @@ foreach ($pydir in $pythons) {
     Invoke-Step { & $python --version }
     Invoke-Step { & $python -m pip install -U pip requests packaging }
     # skip this version if it is already published on PyPI (non-zero = skip)
-    & $python tests\utils.py --check-pip --package ngsolve
+    & $python tests\utils.py --check-pip --package ngsolve-radia
     if ($LASTEXITCODE -ne 0) { continue }
 
     # Works around broken packages or dependencies

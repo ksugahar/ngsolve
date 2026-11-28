@@ -105,7 +105,9 @@ Push-Location $NGSolve
 try {
   Step "ngsolve wheel" { & $py -m build --wheel --no-isolation --outdir $Dist "-Cbuild-dir=$Job/b-ngsolve" "-Ccmake.define.USE_CCACHE=OFF" "-Ccmake.define.USE_MKL=ON" "-Ccmake.define.MKL_ROOT=$mklRoot" "-Ccmake.define.Python3_EXECUTABLE=$($py.Replace('\','/'))" @cudaArgs . }
 } finally { Pop-Location }
-Step "ngsolve repair" { & $py -m delvewheel repair --ignore-existing --namespace-pkg "netgen;netgen.libs;netgen.include" --exclude "nglib.dll" --exclude "ngcore.dll" --exclude "TK*.dll" --exclude "mkl_*.dll" --exclude "libiomp5md.dll" @cudaExclude -w $Wh (Get-ChildItem "$Dist\ngsolve-*.whl").FullName }
+$ngsWheel = @(Get-ChildItem "$Dist\ngsolve_radia-*.whl")
+if ($ngsWheel.Count -ne 1) { throw "expected one ngsolve_radia wheel in $Dist, found $($ngsWheel.Count)" }
+Step "ngsolve repair" { & $py -m delvewheel repair --ignore-existing --namespace-pkg "netgen;netgen.libs;netgen.include" --exclude "nglib.dll" --exclude "ngcore.dll" --exclude "TK*.dll" --exclude "mkl_*.dll" --exclude "libiomp5md.dll" @cudaExclude -w $Wh $ngsWheel.FullName }
 
 # no NVIDIA library may be bundled into a repaired wheel
 Add-Type -AssemblyName System.IO.Compression.FileSystem

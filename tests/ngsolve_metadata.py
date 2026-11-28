@@ -42,21 +42,25 @@ def _blas_requirement() -> str:
 
 
 def _netgen_requirement() -> str:
-    """Pin netgen-mesher to the exact version ngsolve is built against.
+    """Pin netgen-mesher-radia to the exact version ngsolve is built against.
 
     The compiled ngsolve libraries link against netgen's libngcore etc., so the
-    installed netgen-mesher must be ABI-compatible. The build environment has the
-    matching netgen-mesher installed (see the CI build scripts / cibuildwheel
-    before-build step), so read its version from there -- mirroring what the old
-    setup.py did with ``netgen.config.NETGEN_VERSION_PYTHON``.
+    installed netgen must be the same fork build. The build environment has it
+    installed; its distribution metadata and netgen.config must agree. Missing
+    or mismatched netgen fails the build instead of emitting a loose pin.
     """
-    try:
-        import netgen.config
+    from importlib.metadata import PackageNotFoundError, version
 
-        return f"netgen-mesher-radia=={netgen.config.NETGEN_VERSION_PYTHON}"
-    except Exception:
-        # netgen not importable (e.g. plain sdist build): leave it unpinned.
-        return "netgen-mesher-radia"
+    import netgen.config
+
+    built = netgen.config.NETGEN_VERSION_PYTHON
+    try:
+        installed = version("netgen-mesher-radia")
+    except PackageNotFoundError as exc:
+        raise RuntimeError("netgen-mesher-radia is not installed in the build environment") from exc
+    if installed != built:
+        raise RuntimeError(f"netgen-mesher-radia {installed} does not match netgen.config {built}")
+    return f"netgen-mesher-radia=={built}"
 
 
 def dynamic_metadata(field: str, settings: dict | None = None):
